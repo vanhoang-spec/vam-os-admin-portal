@@ -147,3 +147,61 @@ export function groupedTableXlsx<G extends string>(table: XlsxTable<G>, options:
   );
   return zip.generate({ type: "nodebuffer", compression: "DEFLATE" });
 }
+
+/**
+ * Bảng MỘT dòng tiêu đề, không nhóm cột (câu trả lời Form tùy chỉnh, VAM00032): dòng 1 là tên cột, từ dòng 2 là dữ liệu.
+ * Dùng chung cách ghi ô với bảng nhóm ở trên (chữ trong inlineStr nên "=…", "+…", "-…", "@…" không thành công thức),
+ * cố định dòng 1 và đặt bộ lọc từ dòng 1. Tách hàm riêng thay vì thêm cờ "bỏ dòng nhóm" vào groupedTableXlsx: mọi chỉ số
+ * dòng ở đó đều cộng 2, một cờ nữa là thêm một chỗ để lệch một dòng.
+ */
+export function plainTableXlsx(headers: string[], rows: XlsxCell[][], options: { sheetName: string; widths?: number[] }): Buffer {
+  const zip = new PizZip();
+  const lastColumn = columnLetter(Math.max(0, headers.length - 1));
+  const lastRow = rows.length + 1;
+  const sheetName = xml(options.sheetName);
+  const width = (index: number) => options.widths?.[index] ?? 24;
+
+  zip.file(
+    "[Content_Types].xml",
+    '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'
+  );
+  zip.file("_rels/.rels", '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
+  zip.file(
+    "xl/workbook.xml",
+    `<workbook xmlns="${NS}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${sheetName}" sheetId="1" r:id="rId1"/></sheets>` +
+      `<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${sheetName}'!$A$1:$${lastColumn}$${lastRow}</definedName></definedNames></workbook>`
+  );
+  zip.file(
+    "xl/_rels/workbook.xml.rels",
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'
+  );
+  // cellXfs: 0 dữ liệu (xuống dòng, canh trên) · 1 tiêu đề (chữ đậm trắng trên nền xanh VAM).
+  zip.file(
+    "xl/styles.xml",
+    `<styleSheet xmlns="${NS}">` +
+      '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts>' +
+      '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF167C4B"/><bgColor indexed="64"/></patternFill></fill></fills>' +
+      '<borders count="2"><border/><border><left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right><top style="thin"><color rgb="FFCBD5E1"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom></border></borders>' +
+      '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+      '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf>' +
+      '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf></cellXfs>' +
+      '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>'
+  );
+  const headerRow = headers.map((header, index) => cellXml(`${columnLetter(index)}1`, 1, header)).join("");
+  const bodyRows = rows
+    .map((cells, rowIndex) => {
+      const r = rowIndex + 2;
+      return `<row r="${r}">${headers.map((_, index) => cellXml(`${columnLetter(index)}${r}`, 0, cells[index] ?? null)).join("")}</row>`;
+    })
+    .join("");
+  zip.file(
+    "xl/worksheets/sheet1.xml",
+    `<worksheet xmlns="${NS}">` +
+      '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' +
+      `<cols>${headers.map((_, index) => `<col min="${index + 1}" max="${index + 1}" width="${width(index)}" customWidth="1"/>`).join("")}</cols>` +
+      `<sheetData><row r="1">${headerRow}</row>${bodyRows}</sheetData>` +
+      `<autoFilter ref="A1:${lastColumn}${lastRow}"/>` +
+      "</worksheet>"
+  );
+  return zip.generate({ type: "nodebuffer", compression: "DEFLATE" });
+}
