@@ -121,6 +121,67 @@ describe("1. form công khai", () => {
   });
 });
 
+describe("1b. bố cục theo số mức: nhiều mức thì dạng thẻ, không tràn khung", () => {
+  // Khung thẻ form max-w-2xl: từ 9 mức, bảng (9rem + 3.5rem mỗi mức) rộng hơn khung và trang cuộn ngang.
+  const columnsOf = (n: number) => Array.from({ length: n }, (_, i) => String(i));
+  const gridOf = (n: number): CustomFormField => ({ ...GRID, options: columnsOf(n) });
+  const parts = (container: HTMLElement) => {
+    const grid = container.querySelector('[data-field="f_gridaaaa"] [data-testid="likert-grid"]') as HTMLElement;
+    const row = grid.querySelector('[data-testid="likert-row"][data-row="r_noidung1"]') as HTMLElement;
+    return {
+      grid,
+      header: grid.querySelector('[data-testid="likert-header"]') as HTMLElement | null,
+      row,
+      options: row.querySelector('[data-testid="likert-options"]') as HTMLElement,
+      optionTexts: Array.from(row.querySelectorAll("label > span")) as HTMLElement[]
+    };
+  };
+  const smClasses = (el: Element) => Array.from(el.classList).filter((c) => c.startsWith("sm:"));
+
+  it("8 mức: vẫn là bảng từ sm — hàng tiêu đề, hàng lưới theo --likert-cols, chữ mức chỉ cho trình đọc màn hình", () => {
+    const { container } = render(<PublicForm code={CODE} fields={[gridOf(8)]} />);
+    const p = parts(container);
+    expect(p.grid.getAttribute("data-layout")).toBe("table");
+    expect(p.grid.style.getPropertyValue("--likert-cols")).toContain("repeat(8,");
+    expect(p.header).not.toBeNull();
+    expect(p.header!.classList.contains("sm:grid")).toBe(true);
+    expect(p.row.classList.contains("sm:[grid-template-columns:var(--likert-cols)]")).toBe(true);
+    expect(p.options.classList.contains("sm:contents")).toBe(true);
+    expect(p.optionTexts).toHaveLength(8);
+    for (const t of p.optionTexts) expect(t.classList.contains("sm:sr-only")).toBe(true);
+  });
+
+  for (const n of [9, 11]) {
+    it(`${n} mức: dạng thẻ ở mọi độ rộng — không hàng tiêu đề, không lớp sm: trên lưới, hàng, khối mức, nhãn mức`, () => {
+      const { container } = render(<PublicForm code={CODE} fields={[gridOf(n)]} />);
+      const p = parts(container);
+      expect(p.grid.getAttribute("data-layout")).toBe("cards");
+      expect(p.grid.style.getPropertyValue("--likert-cols")).toBe("");
+      expect(p.header).toBeNull();
+      expect(smClasses(p.grid)).toEqual([]);
+      expect(smClasses(p.row)).toEqual([]);
+      expect(smClasses(p.options)).toEqual([]);
+      expect(p.optionTexts.map((t) => t.textContent)).toEqual(columnsOf(n));
+      for (const t of p.optionTexts) expect(smClasses(t)).toEqual([]);
+      for (const l of Array.from(p.row.querySelectorAll("label"))) expect(smClasses(l)).toEqual([]);
+    });
+  }
+
+  it("11 mức: mỗi hàng chọn được đúng một mức, đổi mức thì bỏ mức cũ, hàng kia không bị chạm", () => {
+    const { container } = render(<PublicForm code={CODE} fields={[gridOf(11)]} />);
+    const radios = Array.from(rowEl(container, "r_noidung1").querySelectorAll('input[type="radio"]')) as HTMLInputElement[];
+    expect(radios).toHaveLength(11);
+    expect(container.querySelectorAll('input[type="radio"]')).toHaveLength(22);
+    pick(container, "r_noidung1", "10");
+    pick(container, "r_noidung1", "0");
+    expect(radios.filter((r) => r.checked).map((r) => r.nextSibling?.textContent)).toEqual(["0"]);
+    pick(container, "r_diengia1", "7");
+    const other = Array.from(rowEl(container, "r_diengia1").querySelectorAll("input")) as HTMLInputElement[];
+    expect(other.filter((r) => r.checked).map((r) => r.nextSibling?.textContent)).toEqual(["7"]);
+    expect(radios.filter((r) => r.checked)).toHaveLength(1);
+  });
+});
+
 describe("2. trình tạo form", () => {
   const FORM: BuilderForm = {
     id: "11111111-2222-4333-8444-555555555555",
