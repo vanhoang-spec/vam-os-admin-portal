@@ -62,6 +62,13 @@ export default async function CustomFormResponsesPage(props: { params: Promise<{
         >
           Tải CSV
         </a>
+        <a
+          href={`/api/exports/custom-form/${form.id}?dinh_dang=xlsx`}
+          data-testid="download-xlsx"
+          className="rounded-md bg-vam-green px-4 py-2 text-sm font-semibold text-white hover:bg-vam-green/90"
+        >
+          Xuất Excel (.xlsx)
+        </a>
         <Link
           href={`${CUSTOM_FORMS_PATH}/${form.id}/doi-chieu?doi_tuong=mentee`}
           data-testid="roster-check-link"

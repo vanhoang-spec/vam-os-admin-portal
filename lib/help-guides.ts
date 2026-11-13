@@ -781,7 +781,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Muốn đổi giao diện: chọn “Ảnh banner đầu form”, “Logo đơn vị tổ chức” (và vị trí logo), “Màu chủ đạo”. Chọn xong ảnh phải bấm “Lưu form” thì form mới dùng ảnh đó.",
       "Bấm “Lưu form”, rồi “Xem thử form” để điền thử — bản xem thử kiểm lỗi y như form thật nhưng không ghi gì.",
       "Bấm “Công khai form”, “Sao chép link” và gửi link cho người điền. Hết đợt thì bấm “Đóng form”.",
-      "Xem câu trả lời ở “Xem câu trả lời”: mỗi câu hỏi một cột, mới nhất ở trên, có ô tìm và nút “Tải CSV”.",
+      "Xem câu trả lời ở “Xem câu trả lời”: mỗi câu hỏi một cột, mới nhất ở trên, có ô tìm, nút “Tải CSV” và nút “Xuất Excel (.xlsx)” (cùng các cột, có sẵn bộ lọc, dòng tiêu đề cố định).",
       "Form đăng ký sự kiện: ở “Đăng ký sự kiện” chọn một sự kiện có sẵn hoặc bấm “+ Tạo sự kiện mới” (tên, ngày giờ, địa điểm, sức chứa), có thể đặt “Giới hạn số đăng ký của form”, rồi Lưu. Người điền vào thẳng danh sách người tham gia của sự kiện và nhận thư kèm vé QR của sự kiện; số đăng ký, check-in, huỷ xem ở trang Sự kiện. Gửi lại cùng email và họ tên thì cập nhật đăng ký cũ (không gửi lại thư); cùng email khác họ tên thì không ghi đè và hiện ở “Cảnh báo” trên trang câu trả lời. Sự kiện thu phí, cần minh chứng hay có bữa ăn thì dùng link đăng ký của sự kiện.",
       "Muốn biết ai đã nộp, ai chưa: ở trang câu trả lời bấm “Đối chiếu với danh sách mentee/mentor”, chọn Mentee hoặc Mentor. Trang so với danh sách chính thức của mùa (cùng danh sách ở trang Mentee/Mentor) và chia ba nhóm: Chưa nộp, Người nộp không có trong danh sách, Đã nộp. “Tải CSV đối chiếu” có cột “Nhóm” để lọc người chưa nộp khi nhắc."
     ],
@@ -799,7 +799,7 @@ export const HELP_GUIDES: Record<string, HelpGuide> = {
       "Xoá một Ngắt trang: mọi đích đang trỏ tới trang đó tự bỏ, trình tạo form liệt kê các câu và trang bị mất đích để đặt lại.",
       "Trước khi công khai, hệ thống báo lỗi nếu đích đã mất, đang ẩn, nằm trước, hoặc có trang không ai đi tới được (form đang công khai vẫn lưu được nếu trang đó đã như vậy từ trước). Lựa chọn chưa đặt đích chỉ là cảnh báo, không chặn: nó đi theo đường mặc định.",
       "“Chỉ nhận người đã có trên hệ thống”: email và họ tên phải khớp một mentor hoặc mentee đã được duyệt của mùa hiện tại. Tùy chọn riêng từng form, tắt thì ai cũng gửi được.",
-      "Ai dùng được: Super admin, Admin, Core team, Support team — tạo/sửa form, xem câu trả lời và tải CSV. File có họ tên, email, SĐT, có thể có CCCD: không chia sẻ ra ngoài."
+      "Ai dùng được: Super admin, Admin, Core team, Support team — tạo/sửa form, xem câu trả lời và tải CSV/Excel. File có họ tên, email, SĐT, có thể có CCCD: không chia sẻ ra ngoài."
     ],
     updated: "01/11/2026"
   },

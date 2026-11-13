@@ -157,6 +157,14 @@ describe("2. trang câu trả lời", () => {
     expect(within("mentor-send-counts").textContent).toContain("Đã gửi: 1");
   });
 
+  it("hai nút tải trỏ đúng form: CSV và Excel (.xlsx) qua cùng một route", async () => {
+    await page();
+    expect(screen.getByTestId("download-csv").getAttribute("href")).toBe(`/api/exports/custom-form/${FORM_ID}`);
+    const xlsx = screen.getByTestId("download-xlsx");
+    expect(xlsx.textContent).toBe("Xuất Excel (.xlsx)");
+    expect(xlsx.getAttribute("href")).toBe(`/api/exports/custom-form/${FORM_ID}?dinh_dang=xlsx`);
+  });
+
   it("đọc trạng thái hỏng: báo lỗi, không vẽ như không có gì", async () => {
     h.listSends.mockResolvedValue({ ok: false, message: "Hệ thống đang bận" });
     await page();
