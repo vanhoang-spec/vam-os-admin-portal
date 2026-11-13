@@ -205,7 +205,6 @@ export type EventInput = {
   waitlist_enabled?: unknown;
   /** VAM00015: một email được đăng ký tối đa bấy nhiêu lần; rỗng là không giới hạn. Xem event-registration-limit-core. */
   registration_limit_per_email?: unknown;
-  registration_limit_scope?: unknown;
   allow_walk_in?: unknown;
   qr_checkin_enabled?: unknown;
   /** Các lần quét mã QR. Chỉ có mặt khi form gửi phần thiết lập — xem `parseCheckinStepsInput`. */
@@ -2611,9 +2610,9 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     : { ok: true, steps: DEFAULT_CHECKIN_STEPS.slice() };
   if (!checkinSteps.ok) return { ok: false, message: checkinSteps.message };
 
-  // VAM00015 / VAM00028. Sự kiện lẻ chọn "Toàn bộ chuỗi" vẫn GIỮ phạm vi chuỗi: nó có hiệu lực từ lúc
-  // sự kiện được thêm buổi, và buổi thêm sau theo cùng giới hạn chung.
-  const registrationLimit = parseRegistrationLimitInput(input.registration_limit_per_email, input.registration_limit_scope);
+  // VAM00015 / VAM00028. Giới hạn luôn là của cả chuỗi; sự kiện lẻ là chuỗi một buổi, và giới hạn có
+  // hiệu lực từ lúc sự kiện được thêm buổi (buổi thêm sau theo cùng giới hạn chung).
+  const registrationLimit = parseRegistrationLimitInput(input.registration_limit_per_email);
   if (!registrationLimit.ok) return { ok: false, message: registrationLimit.message };
 
   const payload: JsonRecord = {
@@ -2718,7 +2717,7 @@ export async function createEventSeries(
 
   // Kiểm giới hạn đăng ký MỘT lần trước khi sinh buổi nào, để một ô nhập sai không thành N lời báo lỗi
   // giống hệt nhau (mỗi buổi gọi lại createEvent và kiểm lại cùng ô đó).
-  const seriesLimit = parseRegistrationLimitInput(input.registration_limit_per_email, input.registration_limit_scope);
+  const seriesLimit = parseRegistrationLimitInput(input.registration_limit_per_email);
   if (!seriesLimit.ok) return { ok: false, message: seriesLimit.message };
 
   const generated = generateOccurrences({
@@ -2950,7 +2949,7 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   // đăng ký trước.
   let seriesLimitWrite: RegistrationLimit | null = null;
   if (Object.prototype.hasOwnProperty.call(input, "registration_limit_per_email")) {
-    const parsed = parseRegistrationLimitInput(input.registration_limit_per_email, input.registration_limit_scope);
+    const parsed = parseRegistrationLimitInput(input.registration_limit_per_email);
     if (!parsed.ok) return { ok: false, message: parsed.message };
     const beforeSeriesId = clean(before.series_id);
     let changed = true;
@@ -2959,7 +2958,7 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
       // Không biết chuỗi đang giới hạn gì thì không đoán: ghi theo ô có thể xoá giới hạn của cả chuỗi.
       if (!rows) return { ok: false, message: "Chưa đọc được giới hạn đăng ký của chuỗi nên chưa lưu gì. Vui lòng lưu lại." };
       const current = effectiveRegistrationLimit(before as JsonRecord, rows);
-      changed = current.limit !== parsed.value.limit || current.scope !== parsed.value.scope;
+      changed = current.limit !== parsed.value.limit;
       if (changed) seriesLimitWrite = parsed.value;
     }
     if (changed) {

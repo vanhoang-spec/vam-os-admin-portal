@@ -17,75 +17,65 @@ import {
   seriesRegistrationLimit
 } from "@/lib/event-registration-limit-core";
 
-const parse = (limit: unknown, scope: unknown) => parseRegistrationLimitInput(limit, scope);
+const parse = (limit: unknown) => parseRegistrationLimitInput(limit);
 
 describe("1. đọc ô nhập", () => {
   it("để trống (kể cả toàn khoảng trắng, null, undefined) là không giới hạn", () => {
     for (const empty of ["", "   ", null, undefined]) {
-      expect(parse(empty, "series")).toEqual({ ok: true, value: { limit: null, scope: "event" } });
+      expect(parse(empty)).toEqual({ ok: true, value: { limit: null, scope: "event" } });
     }
   });
 
-  it("chuỗi: số nguyên dương với phạm vi series được giữ nguyên", () => {
-    expect(parse("1", "series")).toEqual({ ok: true, value: { limit: 1, scope: "series" } });
-    expect(parse(" 2 ", "series")).toEqual({ ok: true, value: { limit: 2, scope: "series" } });
-    expect(parse("3", "series")).toEqual({ ok: true, value: { limit: 3, scope: "series" } });
+  it("VAM00028: mọi số nguyên dương đều là giới hạn của CẢ CHUỖI, không còn lựa chọn phạm vi", () => {
+    expect(parse("1")).toEqual({ ok: true, value: { limit: 1, scope: "series" } });
+    expect(parse(" 2 ")).toEqual({ ok: true, value: { limit: 2, scope: "series" } });
+    expect(parse("3")).toEqual({ ok: true, value: { limit: 3, scope: "series" } });
   });
 
   it.each(["0", "-1", "1.5", "1,5", "abc", "1e3", "٣", "+2", "2 buổi", "NaN", "Infinity"])("%s không phải số nguyên dương: bị từ chối với lời nói rõ", (bad) => {
-    const result = parse(bad, "series");
+    const result = parse(bad);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.message).toContain("số nguyên dương");
   });
 
   it("chặn trên: số quá lớn là gõ nhầm, không phải một giới hạn", () => {
-    expect(parse(String(REGISTRATION_LIMIT_MAX), "series").ok).toBe(true);
-    const over = parse(String(REGISTRATION_LIMIT_MAX + 1), "series");
+    expect(parse(String(REGISTRATION_LIMIT_MAX)).ok).toBe(true);
+    const over = parse(String(REGISTRATION_LIMIT_MAX + 1));
     expect(over.ok).toBe(false);
     if (!over.ok) expect(over.message).toContain(String(REGISTRATION_LIMIT_MAX));
   });
 
-  it("phạm vi một sự kiện chỉ nhận số 1: trong một buổi mỗi email vốn chỉ giữ một đăng ký, số lớn hơn là lời hứa không giữ được", () => {
-    expect(parse("1", "event")).toEqual({ ok: true, value: { limit: 1, scope: "event" } });
-    const two = parse("2", "event");
-    expect(two.ok).toBe(false);
-    if (!two.ok) {
-      expect(two.message).toContain("Một sự kiện");
-      expect(two.message).toContain("Toàn bộ chuỗi");
-    }
-    // Không gửi phạm vi cũng là "một sự kiện".
-    expect(parse("2", "").ok).toBe(false);
-  });
-
-  it("VAM00028: sự kiện lẻ chọn phạm vi chuỗi GIỮ phạm vi chuỗi, để buổi thêm sau theo cùng giới hạn chung", () => {
-    // Trước đây bị hạ về "event", rồi "Thêm buổi" chép "event" sang buổi mới: mỗi buổi tự giới hạn riêng.
-    expect(parse("1", "series")).toEqual({ ok: true, value: { limit: 1, scope: "series" } });
-    expect(parse("2", "series")).toEqual({ ok: true, value: { limit: 2, scope: "series" } });
+  it("VAM00028: số 2 trên một sự kiện (lẻ hay của chuỗi) được nhận, không còn bị ép về số 1 của phạm vi 'một sự kiện'", () => {
+    expect(parse("2")).toEqual({ ok: true, value: { limit: 2, scope: "series" } });
   });
 });
 
 describe("1b. giới hạn chung của chuỗi (VAM00028)", () => {
   const row = (limit: unknown, scope: unknown) => ({ registration_limit_per_email: limit, registration_limit_scope: scope });
 
-  it("một buổi mang giới hạn theo chuỗi là đủ: cả chuỗi theo nó, bất kể buổi đó đứng thứ mấy", () => {
+  it("một buổi mang giới hạn là đủ: cả chuỗi theo nó, bất kể buổi đó đứng thứ mấy", () => {
     expect(seriesRegistrationLimit([row(null, "event"), row(1, "series"), row(null, "event")])).toEqual({ limit: 1, scope: "series" });
     expect(seriesRegistrationLimit([row(1, "series"), row(null, "event")])).toEqual({ limit: 1, scope: "series" });
   });
 
-  it("các buổi lệch số: lấy số nhỏ nhất; phạm vi 'event', số trống, số lạ không góp vào", () => {
-    expect(seriesRegistrationLimit([row(3, "series"), row(2, "series"), row(1, "event")])).toEqual({ limit: 2, scope: "series" });
+  it("dòng cũ mang phạm vi 'event' cũng là giới hạn của chuỗi: cột phạm vi không còn được đọc", () => {
+    expect(seriesRegistrationLimit([row(1, "event"), row(null, "event")])).toEqual({ limit: 1, scope: "series" });
+    expect(seriesRegistrationLimit([row(3, "series"), row(2, "series"), row(1, "event")])).toEqual({ limit: 1, scope: "series" });
+  });
+
+  it("các buổi lệch số: lấy số nhỏ nhất; số trống, số lạ không góp vào", () => {
+    expect(seriesRegistrationLimit([row(3, "series"), row(2, "event")])).toEqual({ limit: 2, scope: "series" });
     expect(seriesRegistrationLimit([row(0, "series"), row("abc", "series"), row(null, "series")])).toBeNull();
-    expect(seriesRegistrationLimit([row(1, "event"), row(1, "event")])).toBeNull();
+    expect(seriesRegistrationLimit([null, undefined])).toBeNull();
     expect(seriesRegistrationLimit([])).toBeNull();
   });
 
   it("giới hạn có hiệu lực của một buổi: thuộc chuỗi có giới hạn chung thì theo chuỗi, dù dòng của buổi ghi gì", () => {
     const session = { series_id: "s1", ...row(null, "event") };
     expect(effectiveRegistrationLimit(session, [session, row(1, "series")])).toEqual({ limit: 1, scope: "series" });
-    // Chuỗi không có giới hạn chung: đọc trên chính dòng, như trước.
     const own = { series_id: "s1", ...row(1, "event") };
-    expect(effectiveRegistrationLimit(own, [own, row(null, "event")])).toEqual({ limit: 1, scope: "event" });
-    // Sự kiện lẻ: không có chuỗi để theo.
+    expect(effectiveRegistrationLimit(own, [own, row(null, "event")])).toEqual({ limit: 1, scope: "series" });
+    // Sự kiện lẻ: chuỗi một buổi, đọc trên chính dòng.
     expect(effectiveRegistrationLimit(row(1, "series"), [row(5, "series")])).toEqual({ limit: 1, scope: "event" });
   });
 
@@ -105,10 +95,10 @@ describe("2. đọc giới hạn đang lưu trên một dòng sự kiện", () =
     }
   });
 
-  it("phạm vi series chỉ có hiệu lực khi sự kiện thuộc chuỗi", () => {
+  it("phạm vi suy từ việc thuộc chuỗi, không từ cột phạm vi", () => {
     expect(readRegistrationLimit({ registration_limit_per_email: 1, registration_limit_scope: "series", series_id: "s1" })).toEqual({ limit: 1, scope: "series" });
     expect(readRegistrationLimit({ registration_limit_per_email: 1, registration_limit_scope: "series" })).toEqual({ limit: 1, scope: "event" });
-    expect(readRegistrationLimit({ registration_limit_per_email: 2, registration_limit_scope: "event", series_id: "s1" })).toEqual({ limit: 2, scope: "event" });
+    expect(readRegistrationLimit({ registration_limit_per_email: 2, registration_limit_scope: "event", series_id: "s1" })).toEqual({ limit: 2, scope: "series" });
   });
 });
 

@@ -20,8 +20,14 @@
 -- SỬA
 -- ------------------------------------------------------------
 -- Giới hạn của buổi thuộc chuỗi là giới hạn CỦA CHUỖI: số nhỏ nhất trong các buổi cùng `series_id` có
--- phạm vi 'series' và có số. Một buổi mang giới hạn theo chuỗi là đủ để mọi buổi của chuỗi, kể cả buổi
--- thêm sau, cùng chịu một giới hạn; không phụ thuộc buổi nào được đăng ký trước hay tạo trước.
+-- số. Một buổi mang giới hạn là đủ để mọi buổi của chuỗi, kể cả buổi thêm sau, cùng chịu một giới hạn;
+-- không phụ thuộc buổi nào được đăng ký trước hay tạo trước.
+--
+-- Cột `registration_limit_scope` KHÔNG còn được đọc (BTC chốt 11/11/2026: chỉ có giới hạn toàn chuỗi,
+-- bỏ lựa chọn "Một sự kiện"). Dữ liệu production lúc viết (13/11/2026): mọi chuỗi đang mang giới hạn
+-- đều đã có ít nhất một buổi phạm vi 'series', nên với dữ liệu hiện có, bỏ cột phạm vi không đổi con
+-- số nào so với bản đọc 'series'; nó chỉ khác ở chuỗi CHỈ có dòng 'event' mang số (hiện không có).
+-- Sự kiện lẻ là chuỗi một buổi: ràng buộc một-email-một-buổi đã giữ nó, trigger không làm gì thêm.
 -- Lấy số nhỏ nhất vì đó là hướng an toàn khi các buổi lệch nhau: không ai đăng ký được nhiều hơn mức
 -- chặt nhất BTC đã đặt. TypeScript đọc cùng luật ở `seriesRegistrationLimit` (lib/event-registration-limit-core.ts).
 --
@@ -30,7 +36,7 @@
 --   - chỉ chặn đăng ký công khai; vãng lai, BTC nhập tay, import không bị chặn; vãng lai không bị tính;
 --   - sửa một đăng ký đang tính (cùng email, cùng buổi) không phải lượt mới, nên ai ĐANG vượt giới hạn
 --     trên dữ liệu có sẵn vẫn sửa được đăng ký của mình, không đăng ký nào bị huỷ hay chặn ngược;
---   - sự kiện lẻ và chuỗi mà không buổi nào có phạm vi 'series': trigger không làm gì (ràng buộc
+--   - sự kiện lẻ và chuỗi mà không buổi nào có số giới hạn: trigger không làm gì (ràng buộc
 --     một-email-một-buổi `event_registrations_event_lower_email_active_uidx` vẫn đứng nguyên);
 --   - khoá tư vấn theo (chuỗi, email), cùng một khoá như trước, nay xin ở MỌI buổi của chuỗi có giới hạn.
 --
@@ -98,11 +104,11 @@ begin
     return new;
   end if;
 
-  -- VAM00028: giới hạn của CHUỖI, không phải của buổi đang đăng ký.
+  -- VAM00028: giới hạn của CHUỖI, không phải của buổi đang đăng ký. Không đọc cột phạm vi: BTC chốt
+  -- 11/11/2026 giới hạn luôn tính trên toàn chuỗi, nên dòng cũ ghi 'event' trong chuỗi cũng là giới hạn chung.
   select min(s.registration_limit_per_email) into v_limit
     from public.events s
    where s.series_id = v_series
-     and s.registration_limit_scope = 'series'
      and s.registration_limit_per_email is not null;
 
   if v_limit is null then
@@ -145,7 +151,7 @@ create or replace trigger event_registrations_limit_per_email
 revoke all on function public.vam_enforce_event_registration_limit() from public, anon, authenticated;
 
 comment on column public.events.registration_limit_scope is
-  '"event": đếm trong sự kiện này (trong một buổi một email vốn chỉ giữ một đăng ký còn hiệu lực). "series": giới hạn chung của cả chuỗi (mọi buổi cùng events.series_id, kể cả buổi thêm sau); các buổi lệch nhau thì lấy số nhỏ nhất. Sự kiện lẻ mang "series" thì có hiệu lực khi được thêm buổi.';
+  'Cũ, không còn được đọc (VAM00028, 11/2026). Giới hạn registration_limit_per_email luôn là của cả chuỗi (mọi buổi cùng events.series_id, kể cả buổi thêm sau; các buổi lệch nhau thì lấy số nhỏ nhất). Ứng dụng ghi "series" cho mọi giới hạn mới.';
 
 -- ------------------------------------------------------------
 -- Tự kiểm
@@ -167,6 +173,9 @@ begin
   select p.prosrc into v_src from pg_proc p where p.oid = 'public.vam_enforce_event_registration_limit()'::regprocedure;
   if v_src not like '%min(s.registration_limit_per_email)%' then
     raise exception 'SCHEMA_CONTRACT_VIOLATION: hàm giới hạn chưa đọc giới hạn chung của chuỗi';
+  end if;
+  if v_src like '%registration_limit_scope%' then
+    raise exception 'SCHEMA_CONTRACT_VIOLATION: hàm giới hạn còn đọc cột phạm vi (giới hạn phải luôn là của chuỗi)';
   end if;
 
   if not exists (

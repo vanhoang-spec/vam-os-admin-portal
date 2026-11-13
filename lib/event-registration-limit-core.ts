@@ -33,19 +33,18 @@ function wholeNumber(raw: unknown): number | null {
 }
 
 /**
- * Đọc hai ô trên form sự kiện.
+ * Đọc ô "Giới hạn số buổi mỗi email" trên form sự kiện.
  *
- * - Ô số để trống: không giới hạn (phạm vi bị bỏ qua, về "event").
+ * - Để trống: không giới hạn.
  * - Có số: phải là số nguyên dương, tối đa REGISTRATION_LIMIT_MAX.
- * - Phạm vi "series" được GIỮ cả trên sự kiện lẻ (VAM00028): nó có hiệu lực từ lúc sự kiện được thêm
- *   buổi. Hạ nó về "event" như trước thì "Thêm buổi" chép "event" sang buổi mới, và mỗi buổi tự giới
- *   hạn riêng thay vì chung cả chuỗi. Khi còn lẻ, "series" đọc như "event" (`readRegistrationLimit`).
- * - Phạm vi "event" chỉ nhận số 1: trong một buổi mỗi email đã chỉ giữ một đăng ký còn hiệu lực
- *   (nộp lại là ghi đè), nên số lớn hơn sẽ là lời hứa mà hệ thống không giữ.
+ *
+ * VAM00028 (BTC chốt 11/11/2026): giới hạn LUÔN là của cả chuỗi, không còn lựa chọn "Một sự kiện".
+ * Sự kiện lẻ là chuỗi một buổi: trong một buổi mỗi email vốn chỉ giữ một đăng ký còn hiệu lực, nên số
+ * nhập vào chỉ bắt đầu có tác dụng khi sự kiện được thêm buổi. Phạm vi ghi xuống luôn là "series"; cột
+ * `registration_limit_scope` được giữ cho dữ liệu cũ nhưng không còn ai đọc nó để quyết định.
  */
 export function parseRegistrationLimitInput(
-  limitRaw: unknown,
-  scopeRaw: unknown
+  limitRaw: unknown
 ): { ok: true; value: RegistrationLimit } | { ok: false; message: string } {
   const text = String(limitRaw ?? "").trim();
   if (text === "") return { ok: true, value: NO_REGISTRATION_LIMIT };
@@ -58,36 +57,31 @@ export function parseRegistrationLimitInput(
     return { ok: false, message: `Giới hạn số lần đăng ký tối đa là ${REGISTRATION_LIMIT_MAX}.` };
   }
 
-  const scope: RegistrationLimitScope = String(scopeRaw ?? "").trim() === "series" ? "series" : "event";
-  if (scope === "event" && limit > 1) {
-    return {
-      ok: false,
-      message:
-        "Trong một sự kiện, mỗi email chỉ giữ một đăng ký còn hiệu lực (nộp lại là ghi đè), nên phạm vi “Một sự kiện” chỉ nhận số 1. Muốn cho đăng ký nhiều buổi, chọn phạm vi “Toàn bộ chuỗi”."
-    };
-  }
-  return { ok: true, value: { limit, scope } };
+  return { ok: true, value: { limit, scope: "series" } };
 }
 
-/** Giới hạn đang lưu trên một dòng sự kiện. Giá trị lạ coi như không giới hạn. */
+/**
+ * Giới hạn đang lưu trên một dòng sự kiện. Giá trị lạ coi như không giới hạn. Phạm vi suy từ việc
+ * buổi có thuộc chuỗi hay không, KHÔNG từ cột `registration_limit_scope` (VAM00028): dòng cũ mang
+ * "event" trong một chuỗi vẫn là giới hạn của chuỗi, đúng như trigger áp.
+ */
 export function readRegistrationLimit(event: Record<string, unknown> | null | undefined): RegistrationLimit {
   const limit = wholeNumber(event?.registration_limit_per_email);
   if (limit === null || limit < 1) return NO_REGISTRATION_LIMIT;
-  const inSeries = Boolean(event?.series_id);
-  const scope: RegistrationLimitScope = event?.registration_limit_scope === "series" && inSeries ? "series" : "event";
+  const scope: RegistrationLimitScope = event?.series_id ? "series" : "event";
   return { limit, scope };
 }
 
 /**
  * Giới hạn CHUNG của một chuỗi (VAM00028), từ các dòng `events` cùng `series_id`: số nhỏ nhất trong
- * các buổi có phạm vi "series" và có số. Một buổi mang giới hạn theo chuỗi là đủ để mọi buổi, kể cả
- * buổi thêm sau, cùng chịu nó. Phải khớp trigger `vam_enforce_event_registration_limit`
- * (migration 20261109120000). null: chuỗi không có giới hạn theo chuỗi.
+ * các buổi có số, bất kể cột phạm vi ghi gì. Một buổi mang giới hạn là đủ để mọi buổi, kể cả buổi thêm
+ * sau, cùng chịu nó. Phải khớp trigger `vam_enforce_event_registration_limit` (migration 20261109120000).
+ * null: chuỗi không có giới hạn.
  */
 export function seriesRegistrationLimit(sessions: ReadonlyArray<Record<string, unknown> | null | undefined>): RegistrationLimit | null {
   let lowest: number | null = null;
   for (const row of sessions) {
-    if (row?.registration_limit_scope !== "series") continue;
+    if (!row) continue;
     const limit = wholeNumber(row.registration_limit_per_email);
     if (limit === null || limit < 1) continue;
     if (lowest === null || limit < lowest) lowest = limit;

@@ -403,10 +403,11 @@ export function EventForm({
 
         {/* VAM00015: giới hạn số lần một email được đăng ký. Để trống là không giới hạn. */}
         <div className="mb-4 border-t border-slate-200 pt-4" data-registration-limit>
-          <span className="text-sm font-medium">Giới hạn số lần đăng ký theo email</span>
+          {/* VAM00028 (BTC chốt 11/11/2026): giới hạn luôn tính trên toàn chuỗi, không còn ô chọn phạm vi. */}
+          <span className="text-sm font-medium">Giới hạn số buổi mỗi email được đăng ký trong chuỗi</span>
           <div className="mt-2 grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="text-xs text-slate-500">Số lần tối đa mỗi email (để trống = không giới hạn)</span>
+              <span className="text-xs text-slate-500">Số buổi tối đa mỗi email (để trống = không giới hạn)</span>
               <input
                 type="number"
                 name="registration_limit_per_email"
@@ -416,24 +417,12 @@ export function EventForm({
                 className="mt-1 w-full rounded border px-3 py-1.5 text-sm"
               />
             </label>
-            <label className="block">
-              <span className="text-xs text-slate-500">Tính trong</span>
-              <select
-                name="registration_limit_scope"
-                defaultValue={event?.registration_limit_scope === "series" ? "series" : "event"}
-                className="mt-1 w-full rounded border px-3 py-1.5 text-sm"
-              >
-                <option value="event">Một sự kiện</option>
-                {/* VAM00028: sự kiện lẻ cũng chọn được, để buổi thêm sau theo cùng giới hạn chung. */}
-                <option value="series">Toàn bộ chuỗi sự kiện</option>
-              </select>
-            </label>
           </div>
           <p className="mt-1 text-xs text-slate-500">
-            Chỉ tính đăng ký qua form công khai; vãng lai và BTC nhập tay không bị giới hạn. Huỷ đăng ký thì được hoàn lượt.
-            Trong một buổi, mỗi email vốn chỉ giữ một đăng ký còn hiệu lực (nộp lại là ghi đè), nên “Một sự kiện” chỉ nhận số 1.
-            “Toàn bộ chuỗi” đếm trên mọi buổi của chuỗi: số 1 nghĩa là chỉ được đăng ký một buổi, số 2 là hai buổi.
-            {" "}Giới hạn theo chuỗi áp chung cho mọi buổi, kể cả buổi thêm sau; sự kiện lẻ chọn “Toàn bộ chuỗi” thì giới hạn có hiệu lực khi sự kiện được thêm buổi.
+            Đếm trên mọi buổi của chuỗi: nhập 1 là mỗi email chỉ đăng ký được 1 buổi, nhập 2 là 2 buổi; để trống là không giới hạn.
+            Áp chung cho mọi buổi, kể cả buổi thêm sau. Chỉ tính đăng ký qua form công khai còn hiệu lực; vãng lai và BTC nhập tay
+            không bị giới hạn. Huỷ đăng ký thì được hoàn lượt. Trong một buổi, mỗi email vẫn chỉ giữ một đăng ký (nộp lại là ghi đè).
+            {" "}Sự kiện lẻ là chuỗi một buổi: giới hạn có tác dụng khi sự kiện được thêm buổi.
           </p>
           {event?.series_id ? (
             <p className="mt-2 text-xs text-slate-600" data-series-limit-note>

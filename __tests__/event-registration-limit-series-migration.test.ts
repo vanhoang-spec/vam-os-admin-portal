@@ -213,7 +213,9 @@ describe("2. lỗi thứ tự: chỉ một buổi mang giới hạn (sửa một
   it("các buổi lệch số: lấy số nhỏ nhất (2 và 3 → 2), và khớp seriesRegistrationLimit của TypeScript", async () => {
     const cases: Config[][] = [
       [{ limit: 3, scope: "series" }, { limit: 2, scope: "series" }, NONE, NONE],
+      // Dòng cũ phạm vi 'event' mang số 1 cũng góp vào giới hạn chung (BTC chốt 11/11: chỉ có giới hạn toàn chuỗi).
       [{ limit: 2, scope: "series" }, { limit: 1, scope: "event" }, NONE, NONE],
+      [{ limit: 2, scope: "event" }, NONE, NONE, NONE],
       [NONE, NONE, { limit: 3, scope: "series" }, NONE]
     ];
     for (const configs of cases) {
@@ -290,7 +292,7 @@ describe("5. những thứ không đổi", () => {
     expect(error?.code).toBe("23505");
   }, TIMEOUT);
 
-  it("phạm vi một sự kiện: sự kiện lẻ giới hạn 1 vẫn chỉ là ràng buộc trùng khoá, không phải lỗi giới hạn", async () => {
+  it("sự kiện lẻ (chuỗi một buổi) giới hạn 1: vẫn chỉ là ràng buộc trùng khoá, không phải lỗi giới hạn", async () => {
     const lone = await one<{ id: string }>("insert into events(registration_limit_per_email, registration_limit_scope) values (1, 'event') returning id");
     await register(lone.id, "le-event@x.vn");
     const error = await errorOf(() => register(lone.id, "le-event@x.vn"));
@@ -298,10 +300,34 @@ describe("5. những thứ không đổi", () => {
     expect(error?.message).not.toContain(LIMIT_ERROR);
   }, TIMEOUT);
 
-  it("chuỗi mà mọi buổi phạm vi 'một sự kiện': mỗi buổi tính riêng, một email đăng ký được mọi buổi", async () => {
+  it("VAM00028 (BTC chốt 11/11): cột phạm vi không còn được đọc — chuỗi mà mọi buổi ghi 'một sự kiện' giới hạn 1 vẫn là 1 buổi cho cả chuỗi, mọi thứ tự", async () => {
     const event1: Config = { limit: 1, scope: "event" };
-    const { events } = await newSeries([event1, event1, event1]);
-    for (const event of events) expect(await tryRegister(event, "tung-buoi@x.vn")).toBe(true);
+    for (const order of [[0, 1, 2], [2, 1, 0], [1, 0, 2]]) {
+      const { events } = await newSeries([event1, event1, event1]);
+      const email = freshEmail();
+      const results: boolean[] = [];
+      for (const index of order) results.push(await tryRegister(events[index], email));
+      expect(results, order.join("-")).toEqual([true, false, false]);
+    }
+  }, TIMEOUT);
+
+  it("VAM00028: dữ liệu cũ lệch như trên production (vài buổi 'một sự kiện' 1, vài buổi 'toàn chuỗi' 1, một buổi trống) → 1 buổi cả chuỗi, mọi thứ tự", async () => {
+    const event1: Config = { limit: 1, scope: "event" };
+    for (const order of [[0, 1, 2, 3], [3, 2, 1, 0], [2, 0, 3, 1]]) {
+      const { events } = await newSeries([event1, NONE, SERIES_1, event1]);
+      const email = freshEmail();
+      const results: boolean[] = [];
+      for (const index of order) results.push(await tryRegister(events[index], email));
+      expect(results, order.join("-")).toEqual([true, false, false, false]);
+    }
+  }, TIMEOUT);
+
+  it("VAM00028: buổi thêm sau chép dòng cũ 'một sự kiện' số 1 vào chuỗi đang trống: từ lúc đó cả chuỗi giới hạn 1", async () => {
+    const { seriesId, events } = await newSeries([NONE, NONE]);
+    expect(await tryRegister(events[0], "them-sau@x.vn")).toBe(true);
+    const added = await addSession(seriesId, 3, { limit: 1, scope: "event" });
+    expect(await tryRegister(added, "them-sau@x.vn")).toBe(false);
+    expect(await tryRegister(events[1], "them-sau@x.vn")).toBe(false);
   }, TIMEOUT);
 
   it("chuỗi không giới hạn: đăng ký mọi buổi như trước nay", async () => {
