@@ -33,18 +33,18 @@ function wholeNumber(raw: unknown): number | null {
 }
 
 /**
- * Đọc hai ô trên form sự kiện.
+ * Đọc ô "Giới hạn số buổi mỗi email" trên form sự kiện.
  *
- * - Ô số để trống: không giới hạn (phạm vi bị bỏ qua, về "event").
+ * - Để trống: không giới hạn.
  * - Có số: phải là số nguyên dương, tối đa REGISTRATION_LIMIT_MAX.
- * - Phạm vi "series" chỉ có nghĩa với sự kiện thuộc chuỗi; sự kiện lẻ tự về "event".
- * - Phạm vi "event" chỉ nhận số 1: trong một buổi mỗi email đã chỉ giữ một đăng ký còn hiệu lực
- *   (nộp lại là ghi đè), nên số lớn hơn sẽ là lời hứa mà hệ thống không giữ.
+ *
+ * VAM00028 (BTC chốt 11/11/2026): giới hạn LUÔN là của cả chuỗi, không còn lựa chọn "Một sự kiện".
+ * Sự kiện lẻ là chuỗi một buổi: trong một buổi mỗi email vốn chỉ giữ một đăng ký còn hiệu lực, nên số
+ * nhập vào chỉ bắt đầu có tác dụng khi sự kiện được thêm buổi. Phạm vi ghi xuống luôn là "series"; cột
+ * `registration_limit_scope` được giữ cho dữ liệu cũ nhưng không còn ai đọc nó để quyết định.
  */
 export function parseRegistrationLimitInput(
-  limitRaw: unknown,
-  scopeRaw: unknown,
-  options: { inSeries: boolean }
+  limitRaw: unknown
 ): { ok: true; value: RegistrationLimit } | { ok: false; message: string } {
   const text = String(limitRaw ?? "").trim();
   if (text === "") return { ok: true, value: NO_REGISTRATION_LIMIT };
@@ -57,25 +57,70 @@ export function parseRegistrationLimitInput(
     return { ok: false, message: `Giới hạn số lần đăng ký tối đa là ${REGISTRATION_LIMIT_MAX}.` };
   }
 
-  const wantsSeries = String(scopeRaw ?? "").trim() === "series";
-  const scope: RegistrationLimitScope = wantsSeries && options.inSeries ? "series" : "event";
-  if (scope === "event" && limit > 1) {
-    return {
-      ok: false,
-      message:
-        "Trong một sự kiện, mỗi email chỉ giữ một đăng ký còn hiệu lực (nộp lại là ghi đè), nên phạm vi “Một sự kiện” chỉ nhận số 1. Muốn cho đăng ký nhiều buổi, chọn phạm vi “Toàn bộ chuỗi”."
-    };
-  }
-  return { ok: true, value: { limit, scope } };
+  return { ok: true, value: { limit, scope: "series" } };
 }
 
-/** Giới hạn đang lưu trên một dòng sự kiện. Giá trị lạ coi như không giới hạn. */
+/**
+ * Giới hạn đang lưu trên một dòng sự kiện. Giá trị lạ coi như không giới hạn. Phạm vi suy từ việc
+ * buổi có thuộc chuỗi hay không, KHÔNG từ cột `registration_limit_scope` (VAM00028): dòng cũ mang
+ * "event" trong một chuỗi vẫn là giới hạn của chuỗi, đúng như trigger áp.
+ */
 export function readRegistrationLimit(event: Record<string, unknown> | null | undefined): RegistrationLimit {
   const limit = wholeNumber(event?.registration_limit_per_email);
   if (limit === null || limit < 1) return NO_REGISTRATION_LIMIT;
-  const inSeries = Boolean(event?.series_id);
-  const scope: RegistrationLimitScope = event?.registration_limit_scope === "series" && inSeries ? "series" : "event";
+  const scope: RegistrationLimitScope = event?.series_id ? "series" : "event";
   return { limit, scope };
+}
+
+/**
+ * Giới hạn CHUNG của một chuỗi (VAM00028), từ các dòng `events` cùng `series_id`: số nhỏ nhất trong
+ * các buổi có số, bất kể cột phạm vi ghi gì. Một buổi mang giới hạn là đủ để mọi buổi, kể cả buổi thêm
+ * sau, cùng chịu nó. Phải khớp trigger `vam_enforce_event_registration_limit` (migration 20261109120000).
+ * null: chuỗi không có giới hạn.
+ */
+export function seriesRegistrationLimit(sessions: ReadonlyArray<Record<string, unknown> | null | undefined>): RegistrationLimit | null {
+  let lowest: number | null = null;
+  for (const row of sessions) {
+    if (!row) continue;
+    const limit = wholeNumber(row.registration_limit_per_email);
+    if (limit === null || limit < 1) continue;
+    if (lowest === null || limit < lowest) lowest = limit;
+  }
+  return lowest === null ? null : { limit: lowest, scope: "series" };
+}
+
+/**
+ * Giới hạn có hiệu lực cho một buổi: buổi thuộc chuỗi mà chuỗi có giới hạn chung thì theo chuỗi,
+ * bất kể chính dòng của buổi đó ghi gì; còn lại đọc trên chính dòng.
+ */
+export function effectiveRegistrationLimit(
+  event: Record<string, unknown> | null | undefined,
+  seriesSessions: ReadonlyArray<Record<string, unknown> | null | undefined>
+): RegistrationLimit {
+  if (event?.series_id) {
+    const shared = seriesRegistrationLimit(seriesSessions);
+    if (shared) return shared;
+  }
+  return readRegistrationLimit(event);
+}
+
+/**
+ * Giới hạn mà trigger đã dùng để chặn, đọc từ `detail` của lỗi ("scope=series; limit=N; ...").
+ * Câu báo cho người đăng ký lấy số từ đây, vì đó là con số database thật sự áp, không phải số
+ * ghi trên riêng buổi họ chọn.
+ */
+export function registrationLimitFromError(error: unknown): RegistrationLimit | null {
+  if (!isRegistrationLimitError(error)) return null;
+  const shape = error as { message?: unknown; details?: unknown; hint?: unknown };
+  for (const part of [shape.details, shape.message, shape.hint]) {
+    if (typeof part !== "string") continue;
+    const match = /limit=(\d+)/.exec(part);
+    const limit = match ? wholeNumber(match[1]) : null;
+    if (limit !== null && limit >= 1) {
+      return { limit, scope: /scope=event/.test(part) ? "event" : "series" };
+    }
+  }
+  return null;
 }
 
 /** Câu người đăng ký đọc khi email của họ đã đủ lượt. */

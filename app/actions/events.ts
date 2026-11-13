@@ -112,7 +112,6 @@ export async function createEventAction(
     waitlist_enabled: formText(formData, "waitlist_enabled"),
     // VAM00015: ô để trống là không giới hạn.
     registration_limit_per_email: formText(formData, "registration_limit_per_email"),
-    registration_limit_scope: formText(formData, "registration_limit_scope"),
     // Checkboxes that default-true use has() to distinguish "unchecked" from "absent":
     // pass explicit "true"/"false" so the lib function never receives undefined.
     allow_walk_in: formData.has("allow_walk_in") ? "true" : "false",
@@ -202,12 +201,9 @@ export async function updateEventAction(
     capacity_limit: formText(formData, "capacity_limit"),
     waitlist_enabled: formText(formData, "waitlist_enabled"),
     // VAM00015: chỉ đổi giới hạn đăng ký khi form có gửi ô này (đường ghi hẹp); ô để trống là bỏ giới hạn.
+    // VAM00028: buổi của chuỗi đổi giới hạn là đổi cho cả chuỗi, không còn ô tick "áp cho mọi buổi".
     ...(formData.has("registration_limit_per_email")
-      ? {
-          registration_limit_per_email: formText(formData, "registration_limit_per_email"),
-          registration_limit_scope: formText(formData, "registration_limit_scope"),
-          registration_limit_apply_to_series: formData.has("registration_limit_apply_to_series") ? "true" : "false"
-        }
+      ? { registration_limit_per_email: formText(formData, "registration_limit_per_email") }
       : {}),
     // Checkboxes that default-true use has() to distinguish "unchecked" from "absent":
     // pass explicit "true"/"false" so the lib function never receives undefined.

@@ -26,10 +26,14 @@ import { DEFAULT_CHECKIN_STEPS, parseCheckinStepsInput, type StepsInput } from "
 import { chooseSession } from "@/lib/event-session-choice";
 import { findExistingRegistration } from "@/lib/event-registration-match";
 import {
+  effectiveRegistrationLimit,
   isRegistrationLimitError,
   parseRegistrationLimitInput,
   readRegistrationLimit,
-  registrationLimitReachedMessage
+  registrationLimitFromError,
+  registrationLimitReachedMessage,
+  seriesRegistrationLimit,
+  type RegistrationLimit
 } from "@/lib/event-registration-limit-core";
 import { ensureCheckinCode } from "@/lib/event-checkin";
 import { resolveMapUrl } from "@/lib/event-location";
@@ -201,9 +205,6 @@ export type EventInput = {
   waitlist_enabled?: unknown;
   /** VAM00015: một email được đăng ký tối đa bấy nhiêu lần; rỗng là không giới hạn. Xem event-registration-limit-core. */
   registration_limit_per_email?: unknown;
-  registration_limit_scope?: unknown;
-  /** Chỉ khi sửa một buổi của chuỗi: "true" thì ghi giới hạn này cho mọi buổi của chuỗi. */
-  registration_limit_apply_to_series?: unknown;
   allow_walk_in?: unknown;
   qr_checkin_enabled?: unknown;
   /** Các lần quét mã QR. Chỉ có mặt khi form gửi phần thiết lập — xem `parseCheckinStepsInput`. */
@@ -904,6 +905,42 @@ async function loadSeriesSessions(
   });
 }
 
+/**
+ * Hai cột giới hạn đăng ký của MỌI buổi trong chuỗi, kể cả buổi đã huỷ — trigger cũng đọc như vậy
+ * (VAM00028). null khi không đọc được: người gọi tự quyết đường an toàn.
+ */
+async function loadSeriesLimitRows(client: any, seriesId: string): Promise<JsonRecord[] | null> {
+  const { data, error } = await client
+    .from("events")
+    .select("id,registration_limit_per_email,registration_limit_scope")
+    .eq("series_id", seriesId);
+  if (error) {
+    log("series registration limit load failed", error);
+    return null;
+  }
+  return (data ?? []) as JsonRecord[];
+}
+
+/**
+ * Dòng sự kiện mang giới hạn CÓ HIỆU LỰC ở hai cột giới hạn: buổi thuộc chuỗi có giới hạn chung thì
+ * hiện giới hạn của chuỗi, dù chính dòng của buổi đó ghi gì. Dùng cho form đăng ký công khai và form
+ * sửa sự kiện, để thứ người ta đọc trùng thứ database áp. Không đọc được chuỗi thì trả nguyên dòng.
+ */
+async function withSeriesRegistrationLimitFor<T extends object>(client: any, event: T): Promise<T> {
+  const seriesId = clean((event as JsonRecord).series_id);
+  if (!seriesId) return event;
+  const rows = await loadSeriesLimitRows(client, seriesId);
+  if (!rows) return event;
+  const effective = effectiveRegistrationLimit(event as JsonRecord, rows);
+  return { ...event, registration_limit_per_email: effective.limit, registration_limit_scope: effective.scope };
+}
+
+export async function withSeriesRegistrationLimit<T extends object>(event: T): Promise<T> {
+  const { client } = clientResult();
+  if (!client) return event;
+  return withSeriesRegistrationLimitFor(client, event);
+}
+
 async function getPublicEventLinkData(token: string, linkType: "registration" | "checkin"): Promise<PublicRegistrationData> {
   const { client, error } = clientResult();
   if (!client) {
@@ -954,9 +991,11 @@ async function getPublicEventLinkData(token: string, linkType: "registration" | 
     };
   }
 
-  const event = Array.isArray((data as JsonRecord).events)
+  const linkedEvent = Array.isArray((data as JsonRecord).events)
     ? ((data as JsonRecord).events[0] as Event | undefined)
     : ((data as JsonRecord).events as Event | undefined);
+  // VAM00028: dòng thông tin "tối đa N buổi" trên form đọc giới hạn của cả chuỗi, không của riêng buổi.
+  const event = linkedEvent ? await withSeriesRegistrationLimitFor(client, linkedEvent) : undefined;
   const link = data as unknown as Pick<EventLink, "id" | "event_id" | "token" | "opens_at" | "closes_at" | "is_active">;
   if (!event) {
     return {
@@ -1245,6 +1284,9 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
   let registrationId: string | null = null;
   let updatedExisting = false;
   let effectiveStatus = baseStatus;
+  // Số trong câu báo là số trigger đã áp cho cả chuỗi (VAM00028), không phải số ghi trên riêng buổi này.
+  const limitReached = (error: unknown): RegistrationLimit =>
+    registrationLimitFromError(error) ?? readRegistrationLimit(targetEvent as JsonRecord);
 
   if (existing) {
     const { data: updatedRow, error: updateError } = await applyUpdate(existing.row.id);
@@ -1254,7 +1296,7 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
         return {
           ok: false,
           status: "limit_reached",
-          message: registrationLimitReachedMessage(readRegistrationLimit(targetEvent as JsonRecord)),
+          message: registrationLimitReachedMessage(limitReached(updateError)),
           eventName: targetEvent.event_name ?? null
         };
       }
@@ -1289,7 +1331,7 @@ export async function registerForEvent(input: PublicRegistrationInput): Promise<
         return {
           ok: false,
           status: "limit_reached",
-          message: registrationLimitReachedMessage(readRegistrationLimit(targetEvent as JsonRecord)),
+          message: registrationLimitReachedMessage(limitReached(insertError)),
           eventName: targetEvent.event_name ?? null
         };
       }
@@ -2568,11 +2610,9 @@ export async function createEvent(input: EventInput): Promise<MutationResult> {
     : { ok: true, steps: DEFAULT_CHECKIN_STEPS.slice() };
   if (!checkinSteps.ok) return { ok: false, message: checkinSteps.message };
 
-  // VAM00015. Một buổi của chuỗi đã mang series_id từ createEventSeries; sự kiện lẻ chưa có chuỗi
-  // thì phạm vi "chuỗi" tự về "sự kiện".
-  const registrationLimit = parseRegistrationLimitInput(input.registration_limit_per_email, input.registration_limit_scope, {
-    inSeries: Boolean(clean(input.series_id))
-  });
+  // VAM00015 / VAM00028. Giới hạn luôn là của cả chuỗi; sự kiện lẻ là chuỗi một buổi, và giới hạn có
+  // hiệu lực từ lúc sự kiện được thêm buổi (buổi thêm sau theo cùng giới hạn chung).
+  const registrationLimit = parseRegistrationLimitInput(input.registration_limit_per_email);
   if (!registrationLimit.ok) return { ok: false, message: registrationLimit.message };
 
   const payload: JsonRecord = {
@@ -2677,7 +2717,7 @@ export async function createEventSeries(
 
   // Kiểm giới hạn đăng ký MỘT lần trước khi sinh buổi nào, để một ô nhập sai không thành N lời báo lỗi
   // giống hệt nhau (mỗi buổi gọi lại createEvent và kiểm lại cùng ô đó).
-  const seriesLimit = parseRegistrationLimitInput(input.registration_limit_per_email, input.registration_limit_scope, { inSeries: true });
+  const seriesLimit = parseRegistrationLimitInput(input.registration_limit_per_email);
   if (!seriesLimit.ok) return { ok: false, message: seriesLimit.message };
 
   const generated = generateOccurrences({
@@ -2901,15 +2941,30 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
 
   // VAM00015: đường ghi hẹp. Chỉ khi form có gửi ô này mới đổi giới hạn đăng ký; một lời gọi không có
   // ô này không được xoá giới hạn BTC đã đặt.
-  let limitWrite: { limit: number | null; scope: "event" | "series" } | null = null;
+  //
+  // VAM00028: với buổi thuộc chuỗi, giới hạn là CỦA CHUỖI. Form sửa hiện giới hạn chung của chuỗi
+  // (`withSeriesRegistrationLimit`), nên lưu mà giữ nguyên ô là không đổi gì — kể cả khi chính dòng của
+  // buổi này ghi khác, vì database đã áp giới hạn chung cho nó rồi. Đổi ô là đổi cho MỌI buổi: trước đây
+  // phải tick "áp cho mọi buổi", quên tick thì các buổi lệch nhau và kết quả phụ thuộc buổi nào được
+  // đăng ký trước.
+  let seriesLimitWrite: RegistrationLimit | null = null;
   if (Object.prototype.hasOwnProperty.call(input, "registration_limit_per_email")) {
-    const parsed = parseRegistrationLimitInput(input.registration_limit_per_email, input.registration_limit_scope, {
-      inSeries: Boolean(clean(before.series_id))
-    });
+    const parsed = parseRegistrationLimitInput(input.registration_limit_per_email);
     if (!parsed.ok) return { ok: false, message: parsed.message };
-    limitWrite = parsed.value;
-    updates.registration_limit_per_email = parsed.value.limit;
-    updates.registration_limit_scope = parsed.value.scope;
+    const beforeSeriesId = clean(before.series_id);
+    let changed = true;
+    if (beforeSeriesId) {
+      const rows = await loadSeriesLimitRows(client, beforeSeriesId);
+      // Không biết chuỗi đang giới hạn gì thì không đoán: ghi theo ô có thể xoá giới hạn của cả chuỗi.
+      if (!rows) return { ok: false, message: "Chưa đọc được giới hạn đăng ký của chuỗi nên chưa lưu gì. Vui lòng lưu lại." };
+      const current = effectiveRegistrationLimit(before as JsonRecord, rows);
+      changed = current.limit !== parsed.value.limit;
+      if (changed) seriesLimitWrite = parsed.value;
+    }
+    if (changed) {
+      updates.registration_limit_per_email = parsed.value.limit;
+      updates.registration_limit_scope = parsed.value.scope;
+    }
   }
 
   const dateFields = ["checkin_opens_at", "checkin_closes_at"];
@@ -2938,13 +2993,13 @@ export async function updateEvent(input: EventInput & { id?: unknown }): Promise
   const seriesId = clean(before.series_id);
   if (!seriesId) return { ok: true, message: "Đã cập nhật sự kiện.", data: after };
 
-  // VAM00015: giới hạn theo chuỗi chỉ có nghĩa khi mọi buổi cùng một giá trị, nên người sửa được chọn
-  // áp luôn cho các buổi còn lại. Chỉ ghi đúng hai cột giới hạn, không đụng cột nào khác của các buổi đó.
+  // VAM00028: giới hạn của chuỗi đổi thì đổi cho mọi buổi. Chỉ ghi đúng hai cột giới hạn, không đụng cột
+  // nào khác của các buổi đó.
   let limitNote = "";
-  if (limitWrite && String(input.registration_limit_apply_to_series) === "true") {
+  if (seriesLimitWrite) {
     const { error: siblingLimitError } = await client
       .from("events")
-      .update({ registration_limit_per_email: limitWrite.limit, registration_limit_scope: limitWrite.scope })
+      .update({ registration_limit_per_email: seriesLimitWrite.limit, registration_limit_scope: seriesLimitWrite.scope })
       .eq("series_id", seriesId);
     limitNote = siblingLimitError
       ? "Giới hạn đăng ký mới được lưu cho buổi này nhưng chưa áp được cho các buổi khác của chuỗi — lưu lại để thử lần nữa."
@@ -3471,7 +3526,7 @@ export async function addSessionToSeries(input: {
   // Các buổi đang có của chuỗi. Sự kiện đơn lẻ thì chính nó là buổi duy nhất.
   const { data: siblings, error: siblingsError } = await client
     .from("events")
-    .select("id, starts_at, location_name, location_address")
+    .select("id, starts_at, location_name, location_address, registration_limit_per_email, registration_limit_scope")
     .eq("series_id", seriesId);
 
   if (siblingsError) {
@@ -3545,6 +3600,15 @@ export async function addSessionToSeries(input: {
   payload.series_id = seriesId;
   payload.series_index = newTotal;
   payload.series_total = newTotal;
+
+  // VAM00028: buổi mới mang giới hạn chung của chuỗi, không phải giới hạn ghi trên riêng buổi được bấm
+  // "Thêm buổi" (buổi đó có thể lệch với chuỗi). Database đã áp giới hạn chung cho mọi buổi; ghi ra đây
+  // để form sửa và trang của buổi mới nói đúng điều đó.
+  const sharedLimit = seriesRegistrationLimit([source, ...((siblings ?? []) as JsonRecord[])]);
+  if (sharedLimit) {
+    payload.registration_limit_per_email = sharedLimit.limit;
+    payload.registration_limit_scope = sharedLimit.scope;
+  }
 
   const { data: created, error: insertError } = await client
     .from("events")

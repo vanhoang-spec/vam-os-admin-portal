@@ -61,10 +61,10 @@ describe("1. form đăng ký công khai", () => {
     expect(container.querySelector("[data-registration-limit-notice]")?.textContent).toContain("tối đa 2 buổi");
   });
 
-  it("phạm vi một sự kiện: một lần cho sự kiện này, và không đổi câu về các buổi", () => {
+  it("VAM00028: dòng cũ mang phạm vi 'event' trong chuỗi vẫn là giới hạn của CẢ CHUỖI, đúng như trigger áp", () => {
     const { container } = renderForm({ registration_limit_per_email: 1, registration_limit_scope: "event" });
-    expect(container.querySelector("[data-registration-limit-notice]")?.textContent).toBe("Mỗi email chỉ đăng ký một lần cho sự kiện này.");
-    expect(container.textContent).toContain("Bạn có thể đăng ký cả hai buổi");
+    expect(container.querySelector("[data-registration-limit-notice]")?.textContent).toBe("Mỗi email được đăng ký tối đa 1 buổi trong chuỗi sự kiện này.");
+    expect(container.textContent).not.toContain("đăng ký cả hai buổi");
   });
 
   it("sự kiện lẻ ghi nhầm phạm vi series (không có chuỗi): đọc như một sự kiện, không hứa số buổi", () => {
@@ -88,26 +88,28 @@ describe("1. form đăng ký công khai", () => {
 describe("2. form tạo và sửa sự kiện", () => {
   const form = source("app/events/event-form.tsx");
 
-  it("có ô số (tối thiểu 1) và ô phạm vi, đúng tên mà action đọc", () => {
+  it("có ô số (tối thiểu 1), đúng tên mà action đọc", () => {
     expect(form).toMatch(/name="registration_limit_per_email"[\s\S]{0,80}min=\{1\}/);
-    expect(form).toContain('name="registration_limit_scope"');
-    expect(form).toContain('<option value="event">Một sự kiện</option>');
-    expect(form).toContain('<option value="series">Toàn bộ chuỗi sự kiện</option>');
   });
 
-  it("phạm vi chuỗi chỉ được mời khi tạo chuỗi hoặc khi sửa một buổi của chuỗi", () => {
-    expect(form).toContain('mode === "create" || event?.series_id ? <option value="series">');
+  it("VAM00028 (BTC chốt 11/11): không còn ô chọn phạm vi 'Một sự kiện' / 'Toàn bộ chuỗi' — giới hạn luôn là của chuỗi", () => {
+    expect(form).not.toContain('name="registration_limit_scope"');
+    expect(form).not.toContain("Một sự kiện</option>");
+    expect(form).not.toContain("Toàn bộ chuỗi sự kiện</option>");
+    expect(form).toContain("Giới hạn số buổi mỗi email được đăng ký trong chuỗi");
   });
 
-  it("ô 'áp cho mọi buổi' chỉ có ở buổi thuộc chuỗi, mặc định KHÔNG tick (đường ghi hẹp: sửa một buổi chỉ áp cho buổi đó)", () => {
-    expect(form).toMatch(/event\?\.series_id \? \(\s*<label className="mt-2 flex items-start gap-2">\s*<input type="checkbox" name="registration_limit_apply_to_series" value="true" className="mt-1" \/>/);
-    expect(form).not.toMatch(/name="registration_limit_apply_to_series"[^>]*defaultChecked/);
+  it("VAM00028: không còn ô tick 'áp cho mọi buổi' — quên tick là nguồn gốc của lỗi thứ tự; buổi của chuỗi nói rõ giới hạn là của cả chuỗi", () => {
+    expect(form).not.toContain("registration_limit_apply_to_series");
+    expect(form).toMatch(/event\?\.series_id \? \(\s*<p className="mt-2 text-xs text-slate-600" data-series-limit-note>\s*Đây là giới hạn của cả chuỗi\./);
   });
 
-  it("nói rõ trên form: chỉ tính đăng ký công khai, huỷ hoàn lượt, 'một sự kiện' chỉ nhận số 1", () => {
+  it("nói rõ trên form: đếm trên mọi buổi, chỉ tính đăng ký công khai, huỷ hoàn lượt, để trống là không giới hạn", () => {
+    expect(form).toContain("Đếm trên mọi buổi của chuỗi");
+    expect(form).toContain("để trống là không giới hạn");
     expect(form).toContain("Chỉ tính đăng ký qua form công khai");
     expect(form).toContain("Huỷ đăng ký thì được hoàn lượt");
-    expect(form).toContain("chỉ nhận số 1");
+    expect(form).not.toContain("chỉ nhận số 1");
   });
 });
 
@@ -116,24 +118,27 @@ describe("3. action", () => {
   const createBlock = actions.slice(actions.indexOf("export async function createEventAction"), actions.indexOf("export async function updateEventAction"));
   const updateBlock = actions.slice(actions.indexOf("export async function updateEventAction"), actions.indexOf("const UPDATE_EVENT_OK"));
 
-  it("tạo: luôn gửi hai ô giới hạn (ô trống là không giới hạn)", () => {
+  it("tạo: luôn gửi ô giới hạn (ô trống là không giới hạn), không gửi phạm vi", () => {
     expect(createBlock).toContain('registration_limit_per_email: formText(formData, "registration_limit_per_email")');
-    expect(createBlock).toContain('registration_limit_scope: formText(formData, "registration_limit_scope")');
+    expect(createBlock).not.toContain("registration_limit_scope");
   });
 
-  it("sửa: chỉ gửi giới hạn khi form có ô này, kèm cờ áp cho chuỗi", () => {
+  it("sửa: chỉ gửi giới hạn khi form có ô này; không còn cờ áp cho chuỗi, không gửi phạm vi", () => {
     expect(updateBlock).toContain('formData.has("registration_limit_per_email")');
-    expect(updateBlock).toContain('registration_limit_apply_to_series: formData.has("registration_limit_apply_to_series") ? "true" : "false"');
+    expect(updateBlock).not.toContain("registration_limit_apply_to_series");
+    expect(updateBlock).not.toContain("registration_limit_scope");
     // Gửi vô điều kiện sẽ xoá giới hạn của mọi sự kiện mỗi khi một form khác lưu.
     expect(updateBlock).not.toMatch(/\n\s{4}registration_limit_per_email: formText/);
   });
 });
 
 describe("4. hướng dẫn trong app", () => {
-  it("trang Sự kiện nói về giới hạn, cách tick áp cho chuỗi và hoàn lượt", () => {
+  it("trang Sự kiện nói về giới hạn toàn chuỗi (kể cả buổi thêm sau) và hoàn lượt, không còn nhắc ô phạm vi", () => {
     const guide = source("lib/help-guides.ts");
-    expect(guide).toContain("Giới hạn số lần đăng ký theo email");
-    expect(guide).toContain("Áp giới hạn này cho mọi buổi của chuỗi");
+    expect(guide).toContain("Giới hạn số buổi mỗi email được đăng ký trong chuỗi");
+    expect(guide).not.toContain("Áp giới hạn này cho mọi buổi của chuỗi");
+    expect(guide).not.toContain("chọn “Toàn bộ chuỗi”");
+    expect(guide).toContain("kể cả buổi thêm sau");
     expect(guide).toContain("Huỷ đăng ký thì được hoàn lượt");
   });
 });
