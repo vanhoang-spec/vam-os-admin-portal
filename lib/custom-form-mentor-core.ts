@@ -8,7 +8,7 @@
  *   loi            chưa gửi được, lý do ở last_error
  *   khong_nhan_ra  email không khớp đúng một người: không gửi, BTC thấy trên trang câu trả lời
  */
-import { answerText, isQuestion, type CustomFormAnswers, type CustomFormField } from "@/lib/custom-form-core";
+import { answerCells, answerText, isQuestion, type CustomFormAnswers, type CustomFormField } from "@/lib/custom-form-core";
 
 export const MENTOR_SEND_STATUSES = ["cho_ghep_cap", "dang_gui", "da_gui", "loi", "khong_nhan_ra"] as const;
 export type MentorSendStatus = (typeof MENTOR_SEND_STATUSES)[number];
@@ -70,13 +70,17 @@ export type MentorAnswerRow = { label: string; value: string };
 export function mentorAnswerRows(fields: CustomFormField[], answers: CustomFormAnswers): MentorAnswerRow[] {
   return fields
     .filter((f) => isQuestion(f) && !f.hidden)
-    .map((f) => ({ label: f.label, value: answerText(answers[f.id]) }))
+    .flatMap(answerCells)
+    .map((cell) => ({ label: cell.label, value: answerText(answers[cell.id]) }))
     .filter((row) => row.value);
 }
 
 /** Bảng cho thư thử: đúng câu hỏi đang hiện, chữ giữ chỗ, không chạm dữ liệu người thật. */
 export function sampleMentorAnswerRows(fields: CustomFormField[]): MentorAnswerRow[] {
-  return fields.filter((f) => isQuestion(f) && !f.hidden).map((f) => ({ label: f.label, value: "(câu trả lời của mentee)" }));
+  return fields
+    .filter((f) => isQuestion(f) && !f.hidden)
+    .flatMap(answerCells)
+    .map((cell) => ({ label: cell.label, value: "(câu trả lời của mentee)" }));
 }
 
 export type MentorSweepCounts = { sent: number; waiting: number; unknown: number; failed: number };

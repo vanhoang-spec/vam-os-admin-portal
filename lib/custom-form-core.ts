@@ -24,6 +24,7 @@ export const CUSTOM_FORM_FIELD_TYPES = [
   "multi_choice",
   "dropdown",
   "yes_no",
+  "likert_grid",
   "section",
   "page_break"
 ] as const;
@@ -44,6 +45,7 @@ export const FIELD_TYPE_LABELS: Record<CustomFormFieldType, string> = {
   multi_choice: "Chọn nhiều",
   dropdown: "Danh sách thả xuống",
   yes_no: "Có / Không (rẽ nhánh được)",
+  likert_grid: "Lưới thang đo Likert",
   section: "Tiêu đề / đoạn giới thiệu",
   page_break: "Ngắt trang"
 };
@@ -109,8 +111,47 @@ export const CUSTOM_FORM_LIMITS = {
   url: 1000,
   number: 30,
   autoReplySubject: 200,
-  autoReplyBody: 5000
+  autoReplyBody: 5000,
+  /** Lưới thang đo (VAM00032): mỗi hàng là một cột trong CSV, nên trần hàng giữ bảng câu trả lời đọc được. */
+  gridRows: 30,
+  /** 11 cột đủ cho thang 0–10; nhiều hơn thì trên điện thoại không còn chọn nổi. */
+  gridColumns: 11,
+  gridColumn: 100
 } as const;
+
+/**
+ * Lưới thang đo Likert (VAM00032, 13/11/2026): mỗi hàng là một phát biểu, mỗi cột một mức đánh giá,
+ * người điền chọn đúng một mức cho mỗi hàng — như "Multiple choice grid" của Google Forms.
+ *
+ * Mức (cột) nằm ở `options` như câu chọn một, và câu trả lời lưu CHỮ của mức như câu chọn một: cùng
+ * luật khoá (đã có câu trả lời thì không bỏ / sửa mức cũ, chỉ thêm). Hàng mang mã riêng (`r_…`) vì
+ * câu trả lời khoá theo mã hàng: sửa chính tả một phát biểu không làm rơi câu trả lời cũ.
+ *
+ * Câu trả lời của một hàng nằm phẳng trong `answers` dưới khoá `<mã câu>.<mã hàng>` → chữ của mức.
+ * Không lồng thành object: mọi nơi đọc answers (bảng câu trả lời, CSV, thư cho mentor, sự kiện) vẫn chỉ
+ * gặp chuỗi, và mỗi hàng tự nhiên thành một cột "Câu hỏi [Phát biểu]" như file Google Forms xuất ra.
+ */
+export type CustomFormGridRow = { id: string; label: string };
+
+const GRID_ROW_ID = /^r_[a-z0-9]{6,16}$/;
+
+export function newGridRowId(random: () => number = Math.random): string {
+  let out = "";
+  while (out.length < 8) out += Math.floor(random() * 36).toString(36);
+  return `r_${out.slice(0, 8)}`;
+}
+
+/** Khoá câu trả lời của một hàng trong lưới. Mã trường không có dấu chấm nên khoá này không trùng mã trường nào. */
+export function gridAnswerKey(fieldId: string, rowId: string): string {
+  return `${fieldId}.${rowId}`;
+}
+
+/** Thang mẫu để người tạo form bấm một lần là có đủ cột (ví dụ trong báo lỗi VAM00032). */
+export const LIKERT_PRESETS: ReadonlyArray<{ name: string; columns: readonly string[] }> = [
+  { name: "Thang điểm 1–5", columns: ["1", "2", "3", "4", "5"] },
+  { name: "Mức độ đồng ý", columns: ["Rất không đồng ý", "Không đồng ý", "Trung lập", "Đồng ý", "Rất đồng ý"] },
+  { name: "Mức độ hài lòng", columns: ["Rất không hài lòng", "Không hài lòng", "Bình thường", "Hài lòng", "Rất hài lòng"] }
+];
 
 /**
  * Trần thư tự động của MỘT form trong 24 giờ, và phần chừa lại dưới trần chung (DAILY_EMAIL_LIMIT).
@@ -162,6 +203,8 @@ export type CustomFormField = {
   optionTargets?: Record<string, string>;
   /** Chỉ có ở ngắt trang: đích mặc định khi xong trang mở đầu bằng ngắt trang này. Rỗng = trang kế tiếp. */
   nextPage?: string;
+  /** Chỉ có ở lưới thang đo: các phát biểu cần đánh giá. Mức đánh giá (cột) nằm ở `options`. */
+  rows?: CustomFormGridRow[];
 };
 
 export type CustomFormAnswerValue = string | string[];
@@ -230,6 +273,13 @@ export function parseFieldDefinitions(raw: unknown): { ok: true; fields: CustomF
         seen.add(key);
       }
     }
+    let rows: CustomFormGridRow[] | undefined;
+    if (type === "likert_grid") {
+      const parsed = parseGrid(item);
+      if ("error" in parsed) return { ok: false, error: `${fieldName(draft, i)}: ${parsed.error}` };
+      options = parsed.columns;
+      rows = parsed.rows;
+    }
     let branches: { yes: string; no: string } | undefined;
     if (type === "yes_no") {
       options = [...YES_NO_OPTIONS];
@@ -261,10 +311,53 @@ export function parseFieldDefinitions(raw: unknown): { ok: true; fields: CustomF
       options,
       ...(branches ? { branches } : {}),
       ...(optionTargets ? { optionTargets } : {}),
-      ...(nextPage ? { nextPage } : {})
+      ...(nextPage ? { nextPage } : {}),
+      ...(rows ? { rows } : {})
     });
   }
   return { ok: true, fields };
+}
+
+/** Hàng và cột của một lưới thang đo gửi lên từ trình tạo form; kiểm lại hết, chép sang đối tượng mới. */
+function parseGrid(item: Record<string, unknown>): { columns: string[]; rows: CustomFormGridRow[] } | { error: string } {
+  const columns = (Array.isArray(item.options) ? item.options : []).map(text).filter(Boolean);
+  if (columns.length < 2) return { error: "lưới thang đo cần ít nhất 2 mức đánh giá (cột)." };
+  if (columns.length > CUSTOM_FORM_LIMITS.gridColumns) return { error: `tối đa ${CUSTOM_FORM_LIMITS.gridColumns} mức đánh giá (cột).` };
+  if (columns.some((c) => c.length > CUSTOM_FORM_LIMITS.gridColumn)) return { error: `mỗi mức đánh giá tối đa ${CUSTOM_FORM_LIMITS.gridColumn} ký tự.` };
+  const seenColumns = new Set<string>();
+  for (const column of columns) {
+    const key = column.toLowerCase();
+    if (seenColumns.has(key)) return { error: `mức đánh giá “${column}” bị trùng.` };
+    seenColumns.add(key);
+  }
+  const rawRows = Array.isArray(item.rows) ? item.rows : [];
+  if (!rawRows.length) return { error: "lưới thang đo cần ít nhất 1 phát biểu (hàng)." };
+  if (rawRows.length > CUSTOM_FORM_LIMITS.gridRows) return { error: `tối đa ${CUSTOM_FORM_LIMITS.gridRows} phát biểu (hàng).` };
+  const rows: CustomFormGridRow[] = [];
+  const ids = new Set<string>();
+  const labels = new Set<string>();
+  for (const raw of rawRows) {
+    const row = (raw ?? {}) as Record<string, unknown>;
+    const id = text(row.id);
+    const label = text(row.label);
+    if (!GRID_ROW_ID.test(id) || ids.has(id)) return { error: "mã hàng không hợp lệ — tải lại trang rồi thử lại." };
+    if (!label) return { error: "có phát biểu (hàng) còn trống." };
+    if (label.length > CUSTOM_FORM_LIMITS.label) return { error: `mỗi phát biểu tối đa ${CUSTOM_FORM_LIMITS.label} ký tự.` };
+    if (labels.has(label.toLowerCase())) return { error: `phát biểu “${label.slice(0, 60)}” bị trùng.` };
+    ids.add(id);
+    labels.add(label.toLowerCase());
+    rows.push({ id, label });
+  }
+  return { columns, rows };
+}
+
+/**
+ * Các ô câu trả lời của một câu hỏi: câu thường là một ô khoá theo mã câu; lưới thang đo là một ô mỗi hàng,
+ * nhãn "Câu hỏi [Phát biểu]". Một cửa cho bảng câu trả lời, CSV và thư gửi mentor.
+ */
+export function answerCells(field: CustomFormField): Array<{ id: string; label: string }> {
+  if (field.type !== "likert_grid") return [{ id: field.id, label: field.label }];
+  return (field.rows ?? []).map((row) => ({ id: gridAnswerKey(field.id, row.id), label: `${field.label} [${row.label}]` }));
 }
 
 /** Đọc định nghĩa đã lưu trong database (đã kiểm lúc lưu) — bỏ qua dòng hỏng thay vì vỡ trang. */
@@ -710,6 +803,15 @@ export function checkLockedChanges(oldFields: CustomFormField[], newFields: Cust
       const dropped = old.options.find((o) => !kept.has(o));
       if (dropped !== undefined) return `Câu “${old.label}” đã có câu trả lời nên không bỏ hay sửa được lựa chọn “${dropped}” — chỉ thêm lựa chọn mới.`;
     }
+    if (old.type === "likert_grid") {
+      // Câu trả lời lưu chữ của mức và mã của hàng: bỏ một mức hay một hàng là câu trả lời cũ mất chỗ hiện.
+      const kept = new Set(now.options);
+      const dropped = old.options.find((o) => !kept.has(o));
+      if (dropped !== undefined) return `Câu “${old.label}” đã có câu trả lời nên không bỏ hay sửa được mức “${dropped}” — chỉ thêm mức mới.`;
+      const keptRows = new Set((now.rows ?? []).map((r) => r.id));
+      const lost = (old.rows ?? []).find((r) => !keptRows.has(r.id));
+      if (lost) return `Câu “${old.label}” đã có câu trả lời nên không xoá được phát biểu “${lost.label}” — sửa chữ thì được, hoặc thêm phát biểu mới.`;
+    }
   }
   return null;
 }
@@ -734,6 +836,7 @@ function normalizePhone(raw: string): string {
 function requiredMessage(field: CustomFormField): string {
   if (field.type === "multi_choice") return "Vui lòng chọn ít nhất một lựa chọn.";
   if (field.type === "single_choice" || field.type === "dropdown" || field.type === "yes_no") return "Vui lòng chọn một lựa chọn.";
+  if (field.type === "likert_grid") return "Vui lòng chọn một mức cho mỗi hàng.";
   return "Vui lòng điền mục này.";
 }
 
@@ -796,6 +899,27 @@ function normalizeAnswer(field: CustomFormField, values: string[]): { value: Cus
   }
 }
 
+/**
+ * Câu trả lời của một lưới: chỉ đọc khoá của các hàng đang có trong định nghĩa (khoá lạ gửi lên không được
+ * đọc tới), mỗi hàng nhận một mức có trong danh sách cột. Bắt buộc = mọi hàng đều phải chọn, như "Require a
+ * response in each row" của Google Forms; không bắt buộc thì hàng bỏ trống không được lưu.
+ */
+function gridAnswers(field: CustomFormField, read: (key: string) => string[]): { values: Record<string, string>; missing: number } | { error: string } {
+  const values: Record<string, string> = {};
+  let missing = 0;
+  for (const row of field.rows ?? []) {
+    const key = gridAnswerKey(field.id, row.id);
+    const value = text((read(key) ?? []).find((v) => text(v)));
+    if (!value) {
+      missing += 1;
+      continue;
+    }
+    if (!field.options.includes(value)) return { error: "Lựa chọn không hợp lệ — tải lại trang rồi chọn lại." };
+    values[key] = value;
+  }
+  return { values, missing };
+}
+
 export type AnswerValidation = { ok: boolean; answers: CustomFormAnswers; errors: Record<string, string> };
 
 /**
@@ -808,6 +932,13 @@ export function validateAnswers(fields: CustomFormField[], read: (fieldId: strin
   const errors: Record<string, string> = {};
   for (const field of fields) {
     if (!isQuestion(field) || field.hidden) continue;
+    if (field.type === "likert_grid") {
+      const grid = gridAnswers(field, read);
+      if ("error" in grid) errors[field.id] = grid.error;
+      else if (field.required && grid.missing > 0) errors[field.id] = requiredMessage(field);
+      else Object.assign(answers, grid.values);
+      continue;
+    }
     const result = normalizeAnswer(field, read(field.id) ?? []);
     if ("error" in result) {
       errors[field.id] = result.error;
@@ -850,7 +981,7 @@ export function answerText(value: CustomFormAnswerValue | undefined | null): str
 
 /** Các cột của bảng câu trả lời: mọi câu hỏi, kể cả câu đã ẩn (dữ liệu cũ vẫn phải xem được). */
 export function responseColumns(fields: CustomFormField[]): Array<{ id: string; label: string }> {
-  return fields.filter(isQuestion).map((f) => ({ id: f.id, label: f.hidden ? `${f.label} (đã ẩn)` : f.label }));
+  return fields.filter(isQuestion).flatMap((f) => answerCells(f).map((c) => ({ id: c.id, label: f.hidden ? `${c.label} (đã ẩn)` : c.label })));
 }
 
 // ---------------------------------------------------------------------------
@@ -902,6 +1033,13 @@ export function parseDraft(fields: CustomFormField[], raw: string | null, nowMs:
   const stored = data.values && typeof data.values === "object" && !Array.isArray(data.values) ? (data.values as Record<string, unknown>) : {};
   const values: CustomFormAnswers = {};
   for (const field of fields) {
+    if (field.type === "likert_grid" && !field.hidden) {
+      for (const { id } of answerCells(field)) {
+        const value = Object.prototype.hasOwnProperty.call(stored, id) ? stored[id] : undefined;
+        if (typeof value === "string" && field.options.includes(value)) values[id] = value;
+      }
+      continue;
+    }
     if (!isQuestion(field) || field.hidden || !Object.prototype.hasOwnProperty.call(stored, field.id)) continue;
     const value = stored[field.id];
     if (field.type === "multi_choice") {

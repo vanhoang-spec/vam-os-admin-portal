@@ -22,6 +22,7 @@ import {
 import { maskVietnamDate } from "@/lib/event-datetime";
 import { formatDateTime } from "@/lib/utils";
 import { submitCustomFormAction } from "./actions";
+import { LikertGrid } from "./likert-grid";
 
 /** Tự lưu nháp sau khi ngừng gõ chừng này — đủ thưa để không ghi bộ nhớ ở mỗi phím bấm. */
 export const DRAFT_SAVE_DELAY_MS = 800;
@@ -354,6 +355,19 @@ export function PublicForm({ code, fields, preview = false, themeColor = null }:
                 </label>
               ))}
             </div>
+          );
+        } else if (field.type === "likert_grid") {
+          control = (
+            <LikertGrid
+              field={field}
+              common={common}
+              invalid={Boolean(error)}
+              valueOf={(key) => (typeof values[key] === "string" ? (values[key] as string) : "")}
+              onPick={(key, option) => {
+                setValue(key, option);
+                clearError(field.id);
+              }}
+            />
           );
         } else if (field.type === "dropdown") {
           control = (
