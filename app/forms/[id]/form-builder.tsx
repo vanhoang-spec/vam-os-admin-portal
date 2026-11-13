@@ -13,6 +13,7 @@ import {
   CUSTOM_FORM_STATUS_LABELS,
   CUSTOM_FORMS_PATH,
   FIELD_TYPE_LABELS,
+  LIKERT_PRESETS,
   LOGO_POSITIONS,
   LOGO_POSITION_LABELS,
   YES_NO_OPTIONS,
@@ -21,6 +22,7 @@ import {
   hasBranching,
   isQuestion,
   newFieldId,
+  newGridRowId,
   optionTargetsOf,
   removePageLinks,
   type CustomFormField,
@@ -32,6 +34,7 @@ import { combineVietnamDateTime, maskVietnamDate, maskVietnamTime, splitVietnamD
 import { createEventForFormAction, saveCustomFormAction, sendCustomFormMentorTestAction, sendCustomFormReceiptTestAction, setCustomFormStatusAction } from "../actions";
 import { formatDateTime } from "@/lib/utils";
 import { FormImageField } from "./form-image-field";
+import { LikertEditor } from "./likert-editor";
 
 const BOX =
   "w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
@@ -80,11 +83,20 @@ const toEditable = (f: CustomFormField): EditableField => {
   return { ...f, optionsText: f.options.join("\n"), rowTargets: f.options.map((o) => targets.get(o) ?? "") };
 };
 const lines = (value: string) => value.split("\n").map((l) => l.trim()).filter(Boolean);
+/** Lưới mới: thang 1–5 và hai phát biểu mẫu, để người tạo form thấy ngay hình dạng rồi sửa chữ. */
+const DEFAULT_GRID_COLUMNS = (LIKERT_PRESETS[0]?.columns ?? []).join("\n");
+const defaultGridRows = () => [
+  { id: newGridRowId(), label: "Phát biểu 1" },
+  { id: newGridRowId(), label: "Phát biểu 2" }
+];
 /** Từ dòng đang soạn về định nghĩa gửi lên máy chủ: đây là chỗ đích được khoá lại theo chữ lựa chọn. */
 const toField = ({ optionsText, rowTargets, ...f }: EditableField): CustomFormField => {
-  const options = CHOICE_TYPES.has(f.type) ? lines(optionsText) : f.type === "yes_no" ? [...YES_NO_OPTIONS] : [];
+  const options = CHOICE_TYPES.has(f.type) || f.type === "likert_grid" ? lines(optionsText) : f.type === "yes_no" ? [...YES_NO_OPTIONS] : [];
   const saved: CustomFormField = { ...f, options };
   delete saved.optionTargets;
+  delete saved.rows;
+  // Lưới thang đo: phát biểu bỏ trống coi như chưa thêm, giống dòng lựa chọn trống.
+  if (f.type === "likert_grid") saved.rows = (f.rows ?? []).map((r) => ({ id: r.id, label: r.label.trim() })).filter((r) => r.label);
   if (BRANCHING_CHOICE_TYPES.has(f.type)) {
     const set = optionsText.split("\n").map((row, i): [string, string] => [row.trim(), rowTargets[i] ?? ""]).filter(([option, target]) => option && target);
     if (set.length) saved.optionTargets = Object.fromEntries(set);
@@ -198,6 +210,8 @@ export function FormBuilder({
   // Câu hỏi đã có câu trả lời: theo bản đã lưu lúc mở trang.
   const lockedIds = useMemo(() => new Set(locked ? form.fields.filter(isQuestion).map((f) => f.id) : []), [locked, form.fields]);
   const lockedOptions = useMemo(() => new Map(form.fields.map((f) => [f.id, f.options])), [form.fields]);
+  // Hàng của lưới thang đo đã có câu trả lời: không xoá được (câu trả lời khoá theo mã hàng).
+  const lockedGridRows = useMemo(() => new Map(form.fields.map((f) => [f.id, new Set((f.rows ?? []).map((r) => r.id))])), [form.fields]);
 
   const touch = () => {
     setDirty(true);
@@ -249,6 +263,7 @@ export function FormBuilder({
   };
   const addField = () => {
     const choice = CHOICE_TYPES.has(newType);
+    const grid = newType === "likert_grid";
     setFields((prev) => [
       ...prev,
       {
@@ -259,20 +274,23 @@ export function FormBuilder({
         required: newType !== "section",
         hidden: false,
         options: [],
-        optionsText: choice ? "Lựa chọn 1\nLựa chọn 2" : "",
-        rowTargets: []
+        optionsText: choice ? "Lựa chọn 1\nLựa chọn 2" : grid ? DEFAULT_GRID_COLUMNS : "",
+        rowTargets: [],
+        ...(grid ? { rows: defaultGridRows() } : {})
       }
     ]);
     touch();
   };
   const changeType = (field: EditableField, type: CustomFormFieldType) => {
     const choice = CHOICE_TYPES.has(type);
+    const grid = type === "likert_grid";
     // Đổi ngắt trang sang loại khác cũng là xoá trang đó.
     if (field.type === "page_break" && type !== "page_break") setFields(dropPageLinks(fields, field));
     updateField(field.id, {
       type,
       required: type === "section" ? false : field.required,
-      optionsText: choice && !field.optionsText.trim() ? "Lựa chọn 1\nLựa chọn 2" : field.optionsText
+      optionsText: choice && !field.optionsText.trim() ? "Lựa chọn 1\nLựa chọn 2" : grid && !field.optionsText.trim() ? DEFAULT_GRID_COLUMNS : field.optionsText,
+      ...(grid && !field.rows?.length ? { rows: defaultGridRows() } : {})
     });
   };
 
@@ -899,6 +917,14 @@ export function FormBuilder({
                     </span>
                     <textarea className={BOX} rows={4} value={field.optionsText} onChange={(e) => updateField(field.id, { optionsText: e.target.value })} />
                   </label>
+                ) : field.type === "likert_grid" ? (
+                  <LikertEditor
+                    rows={field.rows ?? []}
+                    columnsText={field.optionsText}
+                    lockedRowIds={fieldLocked ? (lockedGridRows.get(field.id) ?? new Set<string>()) : new Set<string>()}
+                    lockedColumns={fieldLocked ? savedOptions : []}
+                    onChange={(patch) => updateField(field.id, patch)}
+                  />
                 ) : null}
                 {field.type === "yes_no" ? (
                   <div className="grid gap-2 rounded-md border border-vam-line p-2 sm:grid-cols-2" data-testid="branch-targets">
