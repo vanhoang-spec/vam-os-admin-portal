@@ -188,6 +188,12 @@ của database.
 ## Vận hành
 
 - Deploy = merge vào `main`. Không có bước bấm tay.
+- **Phát hành (anh Hoàng chốt 16/11/2026):** Claude push nhánh `fix/` `feat/` `chore/` và mở PR, **không tự
+  merge, không push `main`**. Anh duyệt bằng nhãn **`duyet-phat-hanh`** trên PR. 22:05 giờ Việt Nam,
+  `.github/workflows/phat-hanh-tu-dong.yml` merge các PR có nhãn, CI xanh, gộp được, **không có migration**,
+  rồi gọi `vercel-production.yml` (merge bằng `GITHUB_TOKEN` không tự kích hoạt workflow `push`).
+  PR có file `supabase/migrations/` bị gắn `can-migration` và để nguyên: áp migration rồi merge tay cùng anh,
+  trong khung 22:00–07:00. Sau đợt merge: kiểm deploy xanh rồi mới trả lời và đóng phiếu Báo lỗi.
 - Thư đi qua **Brevo**, gửi từ `hello@alumni-mentoring.edu.vn`.
 - Không dán khoá `service_role` / `sb_secret_` vào bất cứ đâu ngoài biến môi
   trường.

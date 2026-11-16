@@ -1,0 +1,134 @@
+name: Phat hanh tu dong 22h
+
+# VAM OS (anh Hoàng chốt 16/11/2026): PR đã được duyệt bằng nhãn `duyet-phat-hanh` tự squash-merge
+# vào main lúc 22:05 giờ Việt Nam, rồi gọi "Vercel Production Deployment" một lần cho cả đợt.
+#
+# Chỉ merge PR thỏa ĐỦ:
+#   - mở, không phải nháp, base = main, nhánh nằm trong repo này (không nhận PR từ fork);
+#   - có nhãn `duyet-phat-hanh`;
+#   - KHÔNG đổi file nào trong supabase/migrations/ (PR có migration được gắn nhãn `can-migration`
+#     và để nguyên: áp migration là ghi production, vẫn làm tay cùng anh Hoàng);
+#   - CI "Typecheck, lint, test, build" xanh trên đúng commit cuối, không check nào đỏ hay đang chạy;
+#   - GitHub báo gộp được (không xung đột).
+# Merge bằng --match-head-commit: ai đẩy thêm commit sau lúc kiểm thì lần merge đó bị từ chối.
+#
+# Merge bằng GITHUB_TOKEN không kích hoạt workflow "push" (luật của GitHub), nên cuối đợt workflow này
+# tự gọi vercel-production.yml bằng workflow_dispatch. Bước test trong deploy vẫn chạy trên main đã
+# gộp; đỏ thì không deploy, web giữ bản cũ.
+#
+# Khung phát hành 22:00–07:00: chỉ chạy khi giờ Việt Nam từ 22:00 đến trước 06:00 (lịch GitHub có thể
+# trễ). Chạy tay (Run workflow) ngoài khung phải tick bo_qua_khung_gio, chỉ khi anh Hoàng cho phép riêng.
+
+on:
+  schedule:
+    - cron: "5 15 * * *" # 22:05 giờ Việt Nam (UTC+7)
+  workflow_dispatch:
+    inputs:
+      bo_qua_khung_gio:
+        description: "Chạy ngoài khung 22:00–06:00 (chỉ khi anh Hoàng cho phép riêng lần này)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: phat-hanh-tu-dong
+  cancel-in-progress: false
+
+jobs:
+  merge-approved:
+    name: Merge PR da duyet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      NHAN_DUYET: duyet-phat-hanh
+      NHAN_MIGRATION: can-migration
+      CHECK_CI: "Typecheck, lint, test, build"
+      BO_QUA_KHUNG_GIO: ${{ inputs.bo_qua_khung_gio == true }}
+
+    steps:
+      - name: Kiem khung gio
+        id: gio
+        run: |
+          gio=$(TZ=Asia/Ho_Chi_Minh date +%H)
+          gio=$((10#$gio))
+          if [ "$BO_QUA_KHUNG_GIO" = "true" ] || [ "$gio" -ge 22 ] || [ "$gio" -lt 6 ]; then
+            echo "duoc=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "Ngoài khung phát hành (giờ Việt Nam: ${gio}h). Không làm gì." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "duoc=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge PR da duyet
+        id: merge
+        if: steps.gio.outputs.duoc == '1'
+        run: |
+          set -uo pipefail
+          bao() { echo "$1" | tee -a "$GITHUB_STEP_SUMMARY"; }
+          da_merge=0
+
+          prs=$(gh pr list --base main --state open --label "$NHAN_DUYET" --limit 50 \
+            --json number,isDraft,isCrossRepository \
+            --jq '[.[] | select((.isDraft | not) and (.isCrossRepository | not)) | .number] | sort | .[]')
+          if [ -z "$prs" ]; then
+            bao "Không có PR nào mang nhãn \`$NHAN_DUYET\`."
+          fi
+
+          for n in $prs; do
+            files=$(gh api "repos/$GH_REPO/pulls/$n/files" --paginate --jq '.[].filename') || { bao "#$n: không đọc được danh sách file, bỏ qua."; continue; }
+            if printf '%s\n' "$files" | grep -q '^supabase/migrations/'; then
+              co_nhan=$(gh pr view "$n" --json labels --jq "[.labels[].name] | index(\"$NHAN_MIGRATION\") != null")
+              if [ "$co_nhan" != "true" ]; then
+                gh pr edit "$n" --add-label "$NHAN_MIGRATION" >/dev/null
+                gh pr comment "$n" --body "Phát hành tự động bỏ qua PR này vì có file trong \`supabase/migrations/\`. Áp migration và merge làm tay cùng anh Hoàng, trong khung 22:00–07:00." >/dev/null
+              fi
+              bao "#$n: có migration, để làm tay."
+              continue
+            fi
+
+            sha=$(gh pr view "$n" --json headRefOid --jq .headRefOid)
+            ci=$(gh pr view "$n" --json statusCheckRollup --jq "
+              [.statusCheckRollup[] | select(.__typename == \"CheckRun\")] as \$runs
+              | [.statusCheckRollup[] | select(.__typename == \"StatusContext\")] as \$st
+              | if ([\$runs[] | select(.name == \"$CHECK_CI\" and .conclusion == \"SUCCESS\")] | length) == 0 then \"chua-xanh\"
+                elif ([\$runs[] | select(.status != \"COMPLETED\")] | length) > 0 then \"dang-chay\"
+                elif ([\$runs[] | select((.conclusion | IN(\"SUCCESS\", \"SKIPPED\", \"NEUTRAL\")) | not)] | length) > 0 then \"do\"
+                elif ([\$st[] | select(.state != \"SUCCESS\")] | length) > 0 then \"status-chua-xanh\"
+                else \"xanh\" end")
+            if [ "$ci" != "xanh" ]; then
+              bao "#$n: CI $ci, chưa merge."
+              continue
+            fi
+
+            mergeable="UNKNOWN"
+            for _ in 1 2 3 4 5 6; do
+              mergeable=$(gh pr view "$n" --json mergeable --jq .mergeable)
+              [ "$mergeable" != "UNKNOWN" ] && break
+              sleep 10
+            done
+            if [ "$mergeable" != "MERGEABLE" ]; then
+              bao "#$n: GitHub báo $mergeable (xung đột hoặc chưa tính xong), chưa merge."
+              continue
+            fi
+
+            if gh pr merge "$n" --squash --match-head-commit "$sha"; then
+              da_merge=$((da_merge + 1))
+              gh pr comment "$n" --body "Đã tự merge lúc $(TZ=Asia/Ho_Chi_Minh date '+%H:%M %d/%m/%Y') (phát hành tự động 22h). Deploy chạy ngay sau đợt merge; kiểm workflow \"Vercel Production Deployment\" trước khi báo đã lên VAM OS." >/dev/null
+              bao "#$n: đã merge."
+            else
+              bao "#$n: merge thất bại, để nguyên."
+            fi
+          done
+
+          echo "da_merge=$da_merge" >> "$GITHUB_OUTPUT"
+
+      - name: Goi deploy production
+        if: steps.gio.outputs.duoc == '1' && steps.merge.outputs.da_merge != '0' && steps.merge.outputs.da_merge != ''
+        run: |
+          gh workflow run vercel-production.yml --ref main
+          echo "Đã merge ${{ steps.merge.outputs.da_merge }} PR, đã gọi Vercel Production Deployment." | tee -a "$GITHUB_STEP_SUMMARY"
