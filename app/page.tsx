@@ -119,7 +119,10 @@ export default async function DashboardPage(props: { searchParams?: Promise<Reco
     return (
       <>
         <PageHeader title="Tổng quan" description="Tổng quan trạng thái vận hành trong phạm vi được cấp." />
-        <CanDocMaThanhVien />
+        {/*
+          Không có thẻ mã thành viên mới ở nhánh này (VAM00036): thẻ dẫn tới danh sách Mentor, mà viewer và
+          reviewer không được xem danh sách người tham gia (canBrowseParticipants), bấm vào chỉ bị đẩy về đây.
+        */}
         <CanDocBaoLoi />
         {/*
           Reviewer-tier accounts land here, and their assignments are the only

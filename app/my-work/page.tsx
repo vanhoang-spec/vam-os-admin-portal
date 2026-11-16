@@ -9,6 +9,7 @@ import { ErrorBox, PageHeader } from "@/components/ui";
 import { MyWorkClient } from "./my-work-client";
 import { CanDocBaoLoi } from "@/components/bao-loi/can-doc-bao-loi";
 import { CanDocMaThanhVien } from "@/components/can-doc-ma-thanh-vien";
+import { canBrowseParticipants } from "@/lib/read-access";
 
 /**
  * CÔNG VIỆC CỦA TÔI — the personal recruitment work inbox.
@@ -91,7 +92,8 @@ export default async function MyWorkPage() {
         title="Công việc của tôi"
         description="Các phân công tuyển chọn đang thuộc về tài khoản của bạn."
       />
-      <CanDocMaThanhVien />
+      {/* Reviewer vào được trang này nhưng không xem được danh sách Mentor mà thẻ dẫn tới (VAM00036). */}
+      {canBrowseParticipants(adminUser.role) ? <CanDocMaThanhVien /> : null}
       <CanDocBaoLoi />
       <ErrorBox message={reviewsResult.error ?? applicationsResult.error} />
       <MyWorkClient items={items} />

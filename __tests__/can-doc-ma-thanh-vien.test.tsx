@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CanDocMaThanhVien } from "@/components/can-doc-ma-thanh-vien";
+import { canBrowseParticipants } from "@/lib/read-access";
 
 const source = (file: string) => readFileSync(path.resolve(file), "utf8");
 
@@ -38,6 +39,35 @@ describe("thẻ mã thành viên mới", () => {
   });
   it("có ở Công việc của tôi và Tổng quan, vì Support team không vào Công việc của tôi", () => {
     expect(source("app/my-work/page.tsx")).toContain("<CanDocMaThanhVien />");
-    expect(source("app/page.tsx").split("<CanDocMaThanhVien />").length - 1).toBe(2);
+    expect(source("app/page.tsx")).toContain("<CanDocMaThanhVien />");
+  });
+});
+
+describe("thẻ mã thành viên mới không hiện cho vai không xem được danh sách Mentor (VAM00036)", () => {
+  it("thẻ dẫn tới /mentors, trang đó chỉ mở cho vai canBrowseParticipants", () => {
+    expect(source("components/can-doc-ma-thanh-vien.tsx")).toContain('href="/mentors"');
+    expect(source("app/mentors/page.tsx")).toMatch(/!canBrowseParticipants\(routeUser\.role\)\) redirect\("\/"\)/);
+  });
+  it("viewer và reviewer không xem được danh sách người tham gia, support_team trở lên thì xem được", () => {
+    expect(canBrowseParticipants("viewer")).toBe(false);
+    expect(canBrowseParticipants("reviewer")).toBe(false);
+    for (const role of ["support_team", "core_team", "admin", "super_admin"] as const) {
+      expect(canBrowseParticipants(role)).toBe(true);
+    }
+  });
+  it("Tổng quan: nhánh viewer/reviewer không có thẻ, nhánh đầy đủ vẫn có đúng một thẻ", () => {
+    const page = source("app/page.tsx");
+    const tach = page.indexOf('scopeContext.globalRole === "viewer" || scopeContext.globalRole === "reviewer"');
+    expect(tach).toBeGreaterThan(-1);
+    const nhanhHanChe = page.slice(tach, page.indexOf("getDashboardData(scope)", tach));
+    expect(nhanhHanChe).toContain("<CanDocBaoLoi />");
+    expect(nhanhHanChe).not.toContain("<CanDocMaThanhVien />");
+    expect(page.split("<CanDocMaThanhVien />").length - 1).toBe(1);
+    expect(page.slice(page.indexOf("getDashboardData(scope)"))).toContain("<CanDocMaThanhVien />");
+  });
+  it("Công việc của tôi: reviewer vào được trang nhưng thẻ chỉ hiện khi canBrowseParticipants", () => {
+    const page = source("app/my-work/page.tsx");
+    expect(page).toContain("{canBrowseParticipants(adminUser.role) ? <CanDocMaThanhVien /> : null}");
+    expect(page.split("<CanDocMaThanhVien />").length - 1).toBe(1);
   });
 });
