@@ -331,6 +331,67 @@ export function renderTemplate(input: {
   return { ok: true, subject, body };
 }
 
+function escapeHtmlValue(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export type RenderHtmlResult =
+  | { ok: true; html: string }
+  | { ok: false; missing: string[]; message: string };
+
+/**
+ * Điền ô cho thân thư HTML của mẫu soạn bằng trình thiết kế (VAM00038), cho MỘT người nhận.
+ *
+ * Cùng luật với `renderTemplate`: ô thiếu giá trị chặn cả bức thư, ô `emptyAllowed` rỗng thì xoá gọn.
+ * Khác một điều, và là điều quan trọng nhất: GIÁ TRỊ ĐƯỢC ESCAPE HTML. HTML của mẫu đã được lọc ở máy
+ * chủ trước khi tới đây; giá trị điền vào là dữ liệu người dùng tự khai (họ tên trong đơn), nên một
+ * cái tên "<img src=x onerror=…>" phải tới hộp thư dưới dạng chữ, không phải dưới dạng thẻ. Escape cả
+ * dấu nháy, nên ô nằm trong thuộc tính (href="https://…?ma={{ma_thanh_vien}}") cũng không thoát ra được.
+ *
+ * `html` phải là HTML đã lọc. Hàm này không lọc lại: nó thuần, chạy được cả trong trình duyệt (xem trước).
+ */
+export function renderTemplateHtml(input: {
+  kind: TemplateKind;
+  html: string;
+  values: Record<string, string | number | null | undefined>;
+}): RenderHtmlResult {
+  const missing: string[] = [];
+  const valueOf = (key: string) => {
+    const value = input.values[key];
+    return value === null || value === undefined ? "" : String(value).trim();
+  };
+  const blankKeys = new Set(
+    (TEMPLATE_SPECS[input.kind]?.placeholders ?? [])
+      .filter((placeholder) => placeholder.emptyAllowed && !valueOf(placeholder.key))
+      .map((placeholder) => placeholder.key)
+  );
+
+  const html = removeBlankPlaceholders(String(input.html ?? ""), blankKeys)
+    .replace(PLACEHOLDER_PATTERN, (_match, key: string) => {
+      const filled = valueOf(key);
+      if (!filled) {
+        if (!missing.includes(key)) missing.push(key);
+        return "";
+      }
+      return escapeHtmlValue(filled);
+    })
+    .trim();
+
+  if (missing.length) {
+    return {
+      ok: false,
+      missing,
+      message: `Thiếu dữ liệu cho ô: ${missing.map((key) => `{{${key}}}`).join(", ")}.`
+    };
+  }
+  return { ok: true, html };
+}
+
 /** Giá trị mẫu, để xem trước một mẫu thư trước khi có người nhận thật. */
 export function sampleValues(kind: TemplateKind): Record<string, string> {
   const values: Record<string, string> = {};

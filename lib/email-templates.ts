@@ -6,6 +6,7 @@ import {
   type TemplateKind,
   type TemplateStatus
 } from "@/lib/email-templates-core";
+import { VI_CHUA_AP_MIGRATION_THIET_KE } from "@/lib/mail-soan-thao-core";
 import { SEASON_CONFIG } from "@/lib/season-config";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
@@ -42,6 +43,13 @@ export type EmailTemplateRow = {
   name: string;
   subject: string;
   body: string;
+  /**
+   * HTML đã lọc của mẫu soạn bằng trình thiết kế (VAM00038). null = mẫu chữ thuần, hoặc database chưa
+   * áp migration 20261120090000 (lúc đó mọi mẫu đọc ra đều là chữ thuần, gửi y như trước).
+   */
+  bodyHtml: string | null;
+  /** Mẫu gốc của thư này (tạo bằng "Dùng mẫu"). null = thư soạn mới. */
+  sourceTemplateId: string | null;
   status: TemplateStatus;
   createdBy: string | null;
   approvedBy: string | null;
@@ -59,6 +67,8 @@ type RawRow = {
   name: string;
   subject: string;
   body: string;
+  body_html?: string | null;
+  source_template_id?: string | null;
   status: string;
   created_by: string | null;
   approved_by: string | null;
@@ -67,8 +77,35 @@ type RawRow = {
   updated_at: string;
 };
 
-const COLUMNS =
+const LEGACY_COLUMNS =
   "id, season_id, kind, name, subject, body, status, created_by, approved_by, approved_at, created_at, updated_at";
+const COLUMNS = `${LEGACY_COLUMNS}, body_html, source_template_id`;
+
+/**
+ * Lỗi "cột không tồn tại": database chưa áp migration VAM00038 (20261120090000) trong khi mã mới đã
+ * chạy. PostgREST báo 42703 (Postgres) hoặc PGRST204 / PGRST200 (bộ đệm lược đồ), tuỳ đường gọi.
+ */
+export function isMissingRichColumnError(error: unknown): boolean {
+  const err = error as { code?: string; message?: string } | null;
+  if (!err) return false;
+  if (err.code === "42703" || err.code === "PGRST204") return true;
+  const message = String(err.message ?? "");
+  return /(body_html|source_template_id)/.test(message) && /does not exist|schema cache|could not find/i.test(message);
+}
+
+const VI_NEEDS_MIGRATION = VI_CHUA_AP_MIGRATION_THIET_KE;
+
+/**
+ * Đọc mẫu thư kèm cột mới; database chưa có cột thì đọc lại bằng cột cũ. Nhờ vậy màn hình Mail và
+ * mọi lượt gửi chữ thuần vẫn chạy trong khoảng giữa lúc mã mới lên và lúc migration được áp.
+ */
+async function selectTemplates<T>(
+  run: (columns: string) => PromiseLike<{ data: T | null; error: unknown }>
+): Promise<{ data: T | null; error: unknown }> {
+  const first = await run(COLUMNS);
+  if (!first.error || !isMissingRichColumnError(first.error)) return first;
+  return run(LEGACY_COLUMNS);
+}
 
 /**
  * Chuyển một dòng thô thành dòng dùng được, hoặc bỏ qua nó.
@@ -86,6 +123,8 @@ function toRow(raw: RawRow): EmailTemplateRow | null {
     name: raw.name,
     subject: raw.subject,
     body: raw.body,
+    bodyHtml: typeof raw.body_html === "string" && raw.body_html.trim() ? raw.body_html : null,
+    sourceTemplateId: raw.source_template_id ?? null,
     status: raw.status as TemplateStatus,
     createdBy: raw.created_by,
     approvedBy: raw.approved_by,
@@ -102,19 +141,21 @@ export async function listEmailTemplates(
   const client = getSupabaseServiceRoleClient();
   if (!client) return { rows: [], error: VI_READ_ERROR };
 
-  const { data, error } = await client
-    .from("email_templates")
-    .select(COLUMNS)
-    .eq("season_id", seasonId)
-    .neq("status", "archived")
-    .order("updated_at", { ascending: false });
+  const { data, error } = await selectTemplates((columns) =>
+    client
+      .from("email_templates")
+      .select(columns)
+      .eq("season_id", seasonId)
+      .neq("status", "archived")
+      .order("updated_at", { ascending: false })
+  );
 
   if (error) {
     log("listEmailTemplates", error);
     return { rows: [], error: VI_READ_ERROR };
   }
 
-  const rows = ((data ?? []) as RawRow[]).map(toRow).filter((row): row is EmailTemplateRow => row !== null);
+  const rows = ((data ?? []) as unknown as RawRow[]).map(toRow).filter((row): row is EmailTemplateRow => row !== null);
   return { rows: await withApproverNames(rows), error: null };
 }
 
@@ -161,11 +202,9 @@ export async function getEmailTemplate(
   const client = getSupabaseServiceRoleClient();
   if (!client) return { row: null, error: VI_READ_ERROR };
 
-  const { data, error } = await client
-    .from("email_templates")
-    .select(COLUMNS)
-    .eq("id", id)
-    .maybeSingle();
+  const { data, error } = await selectTemplates((columns) =>
+    client.from("email_templates").select(columns).eq("id", id).maybeSingle()
+  );
 
   if (error) {
     log("getEmailTemplate", error);
@@ -173,7 +212,7 @@ export async function getEmailTemplate(
   }
   if (!data) return { row: null, error: null };
 
-  return { row: toRow(data as RawRow), error: null };
+  return { row: toRow(data as unknown as RawRow), error: null };
 }
 
 type LogAction = "created" | "ai_drafted" | "edited" | "approved" | "archived";
@@ -210,6 +249,10 @@ export async function createEmailTemplate(input: {
   name: string;
   subject: string;
   body: string;
+  /** HTML đã lọc (VAM00038). Thiếu / null = mẫu chữ thuần: không gửi cột mới, chạy được khi chưa có migration. */
+  bodyHtml?: string | null;
+  /** Thư này tạo từ mẫu nào ("Dùng mẫu"). Chỉ ghi khi có. */
+  sourceTemplateId?: string | null;
   actorAdminUserId: string | null;
 }): Promise<{ id: string | null; error: string | null }> {
   const client = getSupabaseServiceRoleClient();
@@ -223,6 +266,8 @@ export async function createEmailTemplate(input: {
       name: input.name,
       subject: input.subject,
       body: input.body,
+      ...(input.bodyHtml ? { body_html: input.bodyHtml } : {}),
+      ...(input.sourceTemplateId ? { source_template_id: input.sourceTemplateId } : {}),
       status: "draft",
       created_by: input.actorAdminUserId
     })
@@ -231,14 +276,19 @@ export async function createEmailTemplate(input: {
 
   if (error || !data?.id) {
     log("createEmailTemplate", error);
-    return { id: null, error: VI_WRITE_ERROR };
+    return { id: null, error: isMissingRichColumnError(error) ? VI_NEEDS_MIGRATION : VI_WRITE_ERROR };
   }
 
   await writeLog({
     templateId: data.id,
     action: "created",
     actorAdminUserId: input.actorAdminUserId,
-    detail: { kind: input.kind, name: input.name }
+    detail: {
+      kind: input.kind,
+      name: input.name,
+      ...(input.bodyHtml ? { rich: true } : {}),
+      ...(input.sourceTemplateId ? { copied_from: input.sourceTemplateId } : {})
+    }
   });
 
   return { id: data.id, error: null };
@@ -260,6 +310,13 @@ export async function updateEmailTemplate(input: {
   name: string;
   subject: string;
   body: string;
+  /**
+   * HTML đã lọc (VAM00038). `undefined` = không chạm cột (mẫu chữ thuần sửa như trước, chạy được khi
+   * chưa có migration). `null` = bỏ thiết kế, quay về chữ thuần. Chuỗi = lưu thiết kế.
+   */
+  bodyHtml?: string | null;
+  /** Ghi vào nhật ký: lần sửa này là "Cập nhật mẫu gốc" từ bản sao nào. */
+  fromCopyId?: string | null;
   actorAdminUserId: string | null;
 }): Promise<{ ok: boolean; revoked: boolean; error: string | null }> {
   const client = getSupabaseServiceRoleClient();
@@ -280,6 +337,9 @@ export async function updateEmailTemplate(input: {
       name: input.name,
       subject: input.subject,
       body: input.body,
+      ...(input.bodyHtml !== undefined && (input.bodyHtml !== null || row.bodyHtml !== null)
+        ? { body_html: input.bodyHtml }
+        : {}),
       status: "draft",
       approved_by: null,
       approved_at: null
@@ -288,14 +348,18 @@ export async function updateEmailTemplate(input: {
 
   if (error) {
     log("updateEmailTemplate", error);
-    return { ok: false, revoked: false, error: VI_WRITE_ERROR };
+    return { ok: false, revoked: false, error: isMissingRichColumnError(error) ? VI_NEEDS_MIGRATION : VI_WRITE_ERROR };
   }
 
   await writeLog({
     templateId: input.id,
     action: "edited",
     actorAdminUserId: input.actorAdminUserId,
-    detail: { revoked_approval: revoked }
+    detail: {
+      revoked_approval: revoked,
+      ...(input.bodyHtml !== undefined ? { rich: input.bodyHtml !== null } : {}),
+      ...(input.fromCopyId ? { updated_from_copy: input.fromCopyId } : {})
+    }
   });
 
   return { ok: true, revoked, error: null };

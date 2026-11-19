@@ -43,7 +43,8 @@ import {
   type ExternalFileState
 } from "@/lib/bulk-mail-action-types";
 import { getEmailTemplate, getMailSeason } from "@/lib/email-templates";
-import { renderTemplate, sampleValues } from "@/lib/email-templates-core";
+import { renderTemplate, renderTemplateHtml, sampleValues } from "@/lib/email-templates-core";
+import { locHtmlThu } from "@/lib/mail-soan-thao-core";
 import { sendTemplatedEmail } from "@/lib/email";
 import { canSendBulkEmail } from "@/lib/permissions";
 import { MAIL_DINH_KEM_FIELD, docTepTuForm, type TepDaKiem, type TepKhaiBao } from "@/lib/mail-dinh-kem-core";
@@ -211,6 +212,11 @@ export async function sendTestEmailAction(
       values: sampleValues(row.kind)
     });
     if (!filled.ok) return fail(filled.message);
+    // Mẫu thiết kế (VAM00038): bản thử mang đúng thân thư HTML sẽ đi, để mở trong Gmail / Outlook xem.
+    const html = row.bodyHtml
+      ? renderTemplateHtml({ kind: row.kind, html: locHtmlThu(row.bodyHtml), values: sampleValues(row.kind) })
+      : null;
+    if (html && !html.ok) return fail(html.message);
 
     // Bản thử mang đúng bộ tệp đang chọn: mở thư thử là thấy tệp có đến và mở được không.
     const linked = files.files.length ? await dinhKemChoThuThu(files.files) : null;
@@ -221,6 +227,7 @@ export async function sendTestEmailAction(
       toEmail: auth.adminEmail,
       subject: `[THỬ] ${filled.subject}`,
       body: filled.body,
+      ...(html?.ok ? { html: html.html } : {}),
       ...(linked?.attachments.length ? { attachments: linked.attachments } : {})
     });
 
@@ -317,7 +324,8 @@ export async function startBulkSendAction(
       batch: created.batch,
       seasonCode: auth.seasonCode,
       subject: row.subject,
-      body: row.body
+      body: row.body,
+      bodyHtml: row.bodyHtml
     });
 
     refresh();
@@ -380,7 +388,8 @@ export async function continueBulkSendAction(
       batch,
       seasonCode: auth.seasonCode,
       subject: template.row.subject,
-      body: template.row.body
+      body: template.row.body,
+      bodyHtml: template.row.bodyHtml
     });
 
     refresh();
@@ -582,7 +591,8 @@ export async function startCustomBulkSendAction(
       batch: created.batch,
       seasonCode: auth.seasonCode,
       subject: row.subject,
-      body: row.body
+      body: row.body,
+      bodyHtml: row.bodyHtml
     });
 
     refresh();
