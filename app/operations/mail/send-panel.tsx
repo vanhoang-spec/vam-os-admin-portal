@@ -21,6 +21,7 @@ import {
   startBulkSendAction
 } from "@/app/actions/bulk-mail";
 import { CustomListBuilder } from "./custom-list-builder";
+import { MailAttachmentPicker, MailAttachmentsField, type MailAttachment } from "./mail-attachments";
 
 export type SendableTemplate = { id: string; name: string; subject: string };
 
@@ -154,6 +155,10 @@ export function SendPanel({
   const [audienceChoice, setAudienceChoice] = useState<BulkAudience>("mentee");
   const [eventChoice, setEventChoice] = useState("");
   const [coversSeries, setCoversSeries] = useState(true);
+  // Tệp đính kèm (VAM00037) dùng chung cho thư thử, gửi nhóm cố định và Danh sách tùy chỉnh: thứ
+  // người bấm thấy trong danh sách là đúng thứ mọi form mang đi.
+  const [attachments, setAttachments] = useState<MailAttachment[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   const [testState, testAction] = useFormState(sendTestEmailAction, initialBulkMailActionState);
   const [sendState, sendAction] = useFormState(startBulkSendAction, initialBulkMailActionState);
@@ -334,16 +339,29 @@ export function SendPanel({
         </div>
       ) : null}
 
+      <div className="border-t border-vam-line pt-4">
+        <h3 className="mb-2 text-sm font-semibold text-vam-ink">Tệp đính kèm</h3>
+        <MailAttachmentPicker files={attachments} onChange={setAttachments} onBusyChange={setUploading} />
+      </div>
+
       <form action={testAction} className="flex flex-wrap items-center gap-3 border-t border-vam-line pt-4">
         <input type="hidden" name="template_id" value={templateId} />
-        <SubmitButton label="Gửi thử cho tôi" busyLabel="Đang gửi thử…" tone="quiet" />
+        <MailAttachmentsField files={attachments} />
+        <SubmitButton label="Gửi thử cho tôi" busyLabel="Đang gửi thử…" tone="quiet" disabled={uploading} />
         <p className="text-xs text-slate-500">
           Gửi một bản dùng dữ liệu mẫu tới hộp thư của chính bạn. Không ai khác nhận.
         </p>
       </form>
       <Result state={testState} />
 
-      {audience === "custom" ? <CustomListBuilder templateId={templateId} eventOptions={eventOptions} /> : null}
+      {audience === "custom" ? (
+        <CustomListBuilder
+          templateId={templateId}
+          eventOptions={eventOptions}
+          attachments={attachments}
+          attachmentsBusy={uploading}
+        />
+      ) : null}
 
       {audience !== "custom" ? (
       <form action={sendAction} className="flex flex-col gap-3 border-t border-vam-line pt-4">
@@ -355,10 +373,17 @@ export function SendPanel({
           value={audience === "event" && selectedEvent ? selectedEvent.id : ""}
         />
         <input type="hidden" name="covers_series" value={useSeries ? "true" : "false"} />
+        <MailAttachmentsField files={attachments} />
 
         <p className="text-sm text-vam-ink">
           Sắp gửi <strong className="text-vam-green">{target.sendable}</strong> lá thư cho{" "}
-          <strong>{audienceText}</strong>. Thư đã gửi không thu hồi được.
+          <strong>{audienceText}</strong>
+          {attachments.length ? (
+            <>
+              , mỗi thư kèm <strong>{attachments.length}</strong> tệp
+            </>
+          ) : null}
+          . Thư đã gửi không thu hồi được.
         </p>
 
         <div className="flex flex-wrap items-end gap-3">
@@ -377,7 +402,7 @@ export function SendPanel({
           <SubmitButton
             label="Bắt đầu gửi"
             busyLabel="Đang gửi…"
-            disabled={target.sendable === 0}
+            disabled={target.sendable === 0 || uploading}
           />
         </div>
       </form>

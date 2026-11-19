@@ -46,6 +46,8 @@ import { getEmailTemplate, getMailSeason } from "@/lib/email-templates";
 import { renderTemplate, sampleValues } from "@/lib/email-templates-core";
 import { sendTemplatedEmail } from "@/lib/email";
 import { canSendBulkEmail } from "@/lib/permissions";
+import { MAIL_DINH_KEM_FIELD, docTepTuForm, type TepDaKiem, type TepKhaiBao } from "@/lib/mail-dinh-kem-core";
+import { boTepDaTai, capLinkTaiTep, dinhKemChoThuThu, ganTepVaoLo, kiemTepDaTai, type LinkTaiTep } from "@/lib/mail-dinh-kem";
 import { canOperateSeason, getAdminScopeContext } from "@/lib/program-scope";
 
 function fail(message: string): BulkMailActionState {
@@ -107,6 +109,68 @@ function refresh() {
 }
 
 /**
+ * Tệp đính kèm form gửi lên (VAM00037), đã kiểm lại với kho: đường dẫn của chính người bấm ở mùa
+ * này, tệp có thật, đúng loại, cỡ và tổng trong giới hạn. Form không có tệp → mảng rỗng (hành vi cũ),
+ * và khi đó không chạm tới kho hay bảng tệp — gửi thư không đính kèm chạy được cả khi migration chưa áp.
+ */
+async function attachmentsFromForm(
+  formData: FormData,
+  auth: { seasonId: string; adminUserId: string }
+): Promise<{ ok: true; files: TepDaKiem[] } | { ok: false; state: BulkMailActionState }> {
+  const refs = docTepTuForm(formData.get(MAIL_DINH_KEM_FIELD), { seasonId: auth.seasonId, actorId: auth.adminUserId });
+  if (!refs.ok) return { ok: false, state: fail(refs.message) };
+  if (!refs.files.length) return { ok: true, files: [] };
+  const checked = await kiemTepDaTai(refs.files);
+  if (!checked.ok) return { ok: false, state: fail(checked.message) };
+  return { ok: true, files: checked.files };
+}
+
+function withAttachmentNote(message: string, count: number): string {
+  return count ? `${message} Mỗi thư kèm ${count} tệp.` : message;
+}
+
+export type MailUploadLinksResult =
+  | { ok: true; links: LinkTaiTep[]; problems: string[] }
+  | { ok: false; message: string };
+
+/**
+ * Xin link tải lên cho các tệp vừa chọn. Cùng cổng quyền với nút gửi (chỉ người gửi được thư hàng
+ * loạt mới tải tệp lên được). Trình duyệt PUT thẳng tệp lên kho; máy chủ không nhận byte nào.
+ */
+export async function requestMailAttachmentUploadAction(input: {
+  files: TepKhaiBao[];
+  current: Array<{ size: number }>;
+}): Promise<MailUploadLinksResult> {
+  try {
+    const auth = await authorize();
+    if (!auth.ok) return { ok: false, message: auth.state.message ?? "Không có quyền." };
+    const files = Array.isArray(input?.files) ? input.files.slice(0, 50) : [];
+    const current = Array.isArray(input?.current) ? input.current.slice(0, 50) : [];
+    return await capLinkTaiTep({
+      seasonId: auth.seasonId,
+      actorId: auth.adminUserId,
+      current: current.map((row) => ({ size: Number(row?.size) || 0 })),
+      files: files.map((row) => ({ name: String(row?.name ?? ""), size: Number(row?.size) }))
+    });
+  } catch (error) {
+    console.error("[requestMailAttachmentUploadAction]", error);
+    return { ok: false, message: "Lỗi hệ thống. Vui lòng thử lại." };
+  }
+}
+
+/** Bỏ một tệp chưa gửi khỏi kho (người dùng bấm "Bỏ"). Không xoá được thì tệp chỉ nằm lại trong kho riêng. */
+export async function removeMailAttachmentAction(path: string): Promise<{ ok: boolean }> {
+  try {
+    const auth = await authorize();
+    if (!auth.ok) return { ok: false };
+    return await boTepDaTai({ seasonId: auth.seasonId, actorId: auth.adminUserId, path: String(path ?? "") });
+  } catch (error) {
+    console.error("[removeMailAttachmentAction]", error);
+    return { ok: false };
+  }
+}
+
+/**
  * Gửi một bản thử cho chính người đang bấm.
  *
  * Bước này có mặt vì xem trước trên màn hình không trả lời được câu hỏi thật:
@@ -131,6 +195,9 @@ export async function sendTestEmailAction(
     const templateId = String(formData.get("template_id") ?? "").trim();
     if (!templateId) return fail("Chưa chọn mẫu thư.");
 
+    const files = await attachmentsFromForm(formData, auth);
+    if (!files.ok) return files.state;
+
     const { row, error } = await getEmailTemplate(templateId);
     if (error) return fail(error);
     if (!row) return fail("Không tìm thấy mẫu thư.");
@@ -145,11 +212,16 @@ export async function sendTestEmailAction(
     });
     if (!filled.ok) return fail(filled.message);
 
+    // Bản thử mang đúng bộ tệp đang chọn: mở thư thử là thấy tệp có đến và mở được không.
+    const linked = files.files.length ? await dinhKemChoThuThu(files.files) : null;
+    if (linked && !linked.ok) return fail(linked.message);
+
     const result = await sendTemplatedEmail({
       kind: row.kind,
       toEmail: auth.adminEmail,
       subject: `[THỬ] ${filled.subject}`,
-      body: filled.body
+      body: filled.body,
+      ...(linked?.attachments.length ? { attachments: linked.attachments } : {})
     });
 
     refresh();
@@ -160,7 +232,7 @@ export async function sendTestEmailAction(
 
     return {
       ok: true,
-      message: `Đã gửi bản thử tới ${auth.adminEmail}. Kiểm cả hộp thư rác.`,
+      message: withAttachmentNote(`Đã gửi bản thử tới ${auth.adminEmail}. Kiểm cả hộp thư rác.`, files.files.length),
       batchId: null,
       problems: []
     };
@@ -214,6 +286,10 @@ export async function startBulkSendAction(
     const confirmation = confirmBulkSend({ typed: formData.get("confirm_count"), expected });
     if (!confirmation.ok) return fail(confirmation.message);
 
+    // Kiểm tệp TRƯỚC khi mở lô: tệp hỏng thì không lô nào được mở.
+    const files = await attachmentsFromForm(formData, auth);
+    if (!files.ok) return files.state;
+
     const created = await createEmailBatch({
       seasonId: auth.seasonId,
       kind: row.kind,
@@ -225,6 +301,17 @@ export async function startBulkSendAction(
       actorAdminUserId: auth.adminUserId
     });
     if (created.error || !created.batch) return fail(created.error ?? "Không mở được lô gửi.");
+
+    const bound = await ganTepVaoLo({
+      batchId: created.batch.id,
+      seasonId: auth.seasonId,
+      actorId: auth.adminUserId,
+      files: files.files
+    });
+    if (bound.error) {
+      refresh();
+      return fail(bound.error);
+    }
 
     const run = await runEmailBatch({
       batch: created.batch,
@@ -250,7 +337,7 @@ export async function startBulkSendAction(
 
     return {
       ok: true,
-      message: describeRunResult(run),
+      message: withAttachmentNote(describeRunResult(run), files.files.length),
       batchId: created.batch.id,
       problems
     };
@@ -467,6 +554,9 @@ export async function startCustomBulkSendAction(
     const confirmation = confirmBulkSend({ typed: formData.get("confirm_count"), expected });
     if (!confirmation.ok) return fail(confirmation.message);
 
+    const files = await attachmentsFromForm(formData, auth);
+    if (!files.ok) return files.state;
+
     const created = await createCustomEmailBatch({
       seasonId: auth.seasonId,
       kind: row.kind,
@@ -476,6 +566,17 @@ export async function startCustomBulkSendAction(
       actorAdminUserId: auth.adminUserId
     });
     if (created.error || !created.batch) return fail(created.error ?? "Không mở được lô gửi.");
+
+    const bound = await ganTepVaoLo({
+      batchId: created.batch.id,
+      seasonId: auth.seasonId,
+      actorId: auth.adminUserId,
+      files: files.files
+    });
+    if (bound.error) {
+      refresh();
+      return fail(bound.error);
+    }
 
     const run = await runEmailBatch({
       batch: created.batch,
@@ -488,7 +589,12 @@ export async function startCustomBulkSendAction(
     if (run.error) {
       return { ok: false, message: run.error, batchId: created.batch.id, problems: run.problems };
     }
-    return { ok: true, message: describeRunResult(run), batchId: created.batch.id, problems: run.problems };
+    return {
+      ok: true,
+      message: withAttachmentNote(describeRunResult(run), files.files.length),
+      batchId: created.batch.id,
+      problems: run.problems
+    };
   } catch (error) {
     console.error("[startCustomBulkSendAction]", error);
     return fail("Lỗi hệ thống. Vui lòng thử lại.");

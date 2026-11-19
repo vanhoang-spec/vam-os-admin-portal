@@ -41,6 +41,7 @@ import { formatDate } from "@/lib/utils";
 import { displayCurrentMemberCode } from "@/lib/member-code-core";
 import { renderTemplate, type TemplateKind } from "@/lib/email-templates-core";
 import { sendTemplatedEmail } from "@/lib/email";
+import { tepCuaLo } from "@/lib/mail-dinh-kem";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
 
 /**
@@ -1502,6 +1503,14 @@ export async function runEmailBatch(input: {
     }
   }
 
+  // Tệp đính kèm đã chốt vào lô (VAM00037), đọc lại ở MỖI lần chạy kèm link mới cho nhà cung cấp:
+  // mọi người nhận — lần đầu hay "Gửi tiếp" — nhận đủ cùng một bộ tệp. Lô không có tệp → mảng rỗng,
+  // thư đi y như trước. Không đọc được tệp của một lô CÓ tệp thì dừng, không gửi thư thiếu tệp.
+  const dinhKem = pending.length ? await tepCuaLo(input.batch.id) : { attachments: [], error: null };
+  if (dinhKem.error) {
+    return { ok: false, sent: 0, failed: 0, skipped: 0, remaining: pending.length, problems: [], error: dinhKem.error };
+  }
+
   let sent = 0;
   let failed = 0;
   let skipped = 0;
@@ -1537,7 +1546,8 @@ export async function runEmailBatch(input: {
       subject: filled.subject,
       body: filled.body,
       relation: outboundRelationFor(recipient),
-      batchId: input.batch.id
+      batchId: input.batch.id,
+      ...(dinhKem.attachments.length ? { attachments: dinhKem.attachments } : {})
     });
 
     if (result.skipped) skipped += 1;
