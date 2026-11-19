@@ -222,6 +222,10 @@ export async function sendTestEmailAction(
     const linked = files.files.length ? await dinhKemChoThuThu(files.files) : null;
     if (linked && !linked.ok) return fail(linked.message);
 
+    // Bản thử mang đúng bộ tệp đang chọn: mở thư thử là thấy tệp có đến và mở được không.
+    const linked = files.files.length ? await dinhKemChoThuThu(files.files) : null;
+    if (linked && !linked.ok) return fail(linked.message);
+
     const result = await sendTemplatedEmail({
       kind: row.kind,
       toEmail: auth.adminEmail,

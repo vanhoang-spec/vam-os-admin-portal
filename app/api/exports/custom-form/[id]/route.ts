@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentAdminUser } from "@/lib/admin-auth";
 import { privateExportHeaders } from "@/lib/application-export-access";
-import { answerText, responseColumns } from "@/lib/custom-form-core";
+import { answerNumber, answerText, numericAnswerIds, responseColumns } from "@/lib/custom-form-core";
 import { listCustomFormResponses } from "@/lib/custom-forms";
 import { CSV_UTF8_BOM, toCsv } from "@/lib/csv-export";
 import { isUuid } from "@/lib/participant-invite-core";
@@ -45,7 +45,13 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
   const body = responses.map((r) => [formatDateTime(r.createdAt), ...columns.map((c) => answerText(r.answers[c.id]))]);
 
   if (format === "xlsx") {
-    const bytes = plainTableXlsx(header, body, { sheetName: "Câu trả lời", widths: [18, ...columns.map(() => 28)] });
+    // Thang đo tuyến tính (VAM00033) ghi số thật để tổng hợp được; mọi ô khác giữ đúng chữ như CSV.
+    const numeric = numericAnswerIds(form.fields);
+    const cells = responses.map((r) => [
+      formatDateTime(r.createdAt),
+      ...columns.map((c) => (numeric.has(c.id) ? answerNumber(r.answers[c.id]) : answerText(r.answers[c.id])))
+    ]);
+    const bytes = plainTableXlsx(header, cells, { sheetName: "Câu trả lời", widths: [18, ...columns.map(() => 28)] });
     return new NextResponse(new Uint8Array(bytes), { status: 200, headers: privateExportHeaders(XLSX, `form-${form.publicCode}.xlsx`) });
   }
   return new NextResponse(CSV_UTF8_BOM + toCsv([header, ...body]), {

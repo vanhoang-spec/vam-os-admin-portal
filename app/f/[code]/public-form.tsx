@@ -23,6 +23,7 @@ import { maskVietnamDate } from "@/lib/event-datetime";
 import { formatDateTime } from "@/lib/utils";
 import { submitCustomFormAction } from "./actions";
 import { LikertGrid } from "./likert-grid";
+import { LinearScale } from "./linear-scale";
 
 /** Tự lưu nháp sau khi ngừng gõ chừng này — đủ thưa để không ghi bộ nhớ ở mỗi phím bấm. */
 export const DRAFT_SAVE_DELAY_MS = 800;
@@ -369,6 +370,8 @@ export function PublicForm({ code, fields, preview = false, themeColor = null }:
               }}
             />
           );
+        } else if (field.type === "linear_scale") {
+          control = <LinearScale field={field} common={common} value={text} themeColor={themeColor} onPick={(n) => setValue(field.id, n)} />;
         } else if (field.type === "dropdown") {
           control = (
             <select {...common} className={BOX} value={text} onChange={(e) => setValue(field.id, e.target.value)}>

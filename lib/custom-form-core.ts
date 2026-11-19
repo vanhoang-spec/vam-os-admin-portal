@@ -25,6 +25,7 @@ export const CUSTOM_FORM_FIELD_TYPES = [
   "dropdown",
   "yes_no",
   "likert_grid",
+  "linear_scale",
   "section",
   "page_break"
 ] as const;
@@ -46,6 +47,7 @@ export const FIELD_TYPE_LABELS: Record<CustomFormFieldType, string> = {
   dropdown: "Danh sách thả xuống",
   yes_no: "Có / Không (rẽ nhánh được)",
   likert_grid: "Lưới thang đo Likert",
+  linear_scale: "Thang đo tuyến tính",
   section: "Tiêu đề / đoạn giới thiệu",
   page_break: "Ngắt trang"
 };
@@ -116,8 +118,49 @@ export const CUSTOM_FORM_LIMITS = {
   gridRows: 30,
   /** 11 cột đủ cho thang 0–10; nhiều hơn thì trên điện thoại không còn chọn nổi. */
   gridColumns: 11,
-  gridColumn: 100
+  gridColumn: 100,
+  /** Nhãn hai đầu của thang đo tuyến tính (VAM00033), vd. "Rất không hài lòng". */
+  scaleLabel: 100
 } as const;
+
+/**
+ * Thang đo tuyến tính (VAM00033, 19/11/2026) — như "Linear scale" của Google Forms: một câu hỏi, các mức điểm
+ * nguyên liên tiếp từ `min` (0 hoặc 1) tới `max` (2–10), nhãn mô tả tuỳ chọn cho hai đầu. Người điền chọn đúng
+ * một mức trên một hàng ngang.
+ *
+ * Định nghĩa nằm ở `scale`, KHÔNG ở `options`: mức điểm suy ra từ khoảng, nên không có danh sách chữ nào để sửa
+ * lệch. Câu trả lời lưu chữ số của mức ("4") như mọi câu một giá trị (bảng câu trả lời, CSV, thư cho mentor đọc
+ * như thường); file Excel ghi thành SỐ để cộng, lấy trung bình được (xem `numericAnswerIds`).
+ */
+export type CustomFormScale = { min: number; max: number; minLabel: string; maxLabel: string };
+export const LINEAR_SCALE_MINS = [0, 1] as const;
+export const LINEAR_SCALE_MAX_FROM = 2;
+export const LINEAR_SCALE_MAX_TO = 10;
+export const DEFAULT_LINEAR_SCALE: CustomFormScale = { min: 1, max: 5, minLabel: "", maxLabel: "" };
+
+/** Các mức của thang, dạng chữ số (đúng chuỗi được lưu trong câu trả lời). */
+export function scaleValues(scale: Pick<CustomFormScale, "min" | "max"> | undefined): string[] {
+  if (!scale) return [];
+  const out: string[] = [];
+  for (let n = scale.min; n <= scale.max; n += 1) out.push(String(n));
+  return out;
+}
+
+function parseScale(raw: unknown): { scale: CustomFormScale } | { error: string } {
+  const item = (raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}) as Record<string, unknown>;
+  const min = Number(item.min);
+  const max = Number(item.max);
+  if (!(LINEAR_SCALE_MINS as readonly number[]).includes(min)) return { error: "điểm bắt đầu của thang đo phải là 0 hoặc 1." };
+  if (!Number.isInteger(max) || max < LINEAR_SCALE_MAX_FROM || max > LINEAR_SCALE_MAX_TO) {
+    return { error: `điểm kết thúc của thang đo phải từ ${LINEAR_SCALE_MAX_FROM} đến ${LINEAR_SCALE_MAX_TO}.` };
+  }
+  const minLabel = text(item.minLabel).replace(/\s+/g, " ");
+  const maxLabel = text(item.maxLabel).replace(/\s+/g, " ");
+  if (minLabel.length > CUSTOM_FORM_LIMITS.scaleLabel || maxLabel.length > CUSTOM_FORM_LIMITS.scaleLabel) {
+    return { error: `nhãn hai đầu thang đo tối đa ${CUSTOM_FORM_LIMITS.scaleLabel} ký tự.` };
+  }
+  return { scale: { min, max, minLabel, maxLabel } };
+}
 
 /**
  * Lưới thang đo Likert (VAM00032, 13/11/2026): mỗi hàng là một phát biểu, mỗi cột một mức đánh giá,
@@ -205,6 +248,8 @@ export type CustomFormField = {
   nextPage?: string;
   /** Chỉ có ở lưới thang đo: các phát biểu cần đánh giá. Mức đánh giá (cột) nằm ở `options`. */
   rows?: CustomFormGridRow[];
+  /** Chỉ có ở thang đo tuyến tính (VAM00033): khoảng điểm và nhãn hai đầu. `options` để trống. */
+  scale?: CustomFormScale;
 };
 
 export type CustomFormAnswerValue = string | string[];
@@ -280,6 +325,12 @@ export function parseFieldDefinitions(raw: unknown): { ok: true; fields: CustomF
       options = parsed.columns;
       rows = parsed.rows;
     }
+    let scale: CustomFormScale | undefined;
+    if (type === "linear_scale") {
+      const parsed = parseScale(item.scale);
+      if ("error" in parsed) return { ok: false, error: `${fieldName(draft, i)}: ${parsed.error}` };
+      scale = parsed.scale;
+    }
     let branches: { yes: string; no: string } | undefined;
     if (type === "yes_no") {
       options = [...YES_NO_OPTIONS];
@@ -312,7 +363,8 @@ export function parseFieldDefinitions(raw: unknown): { ok: true; fields: CustomF
       ...(branches ? { branches } : {}),
       ...(optionTargets ? { optionTargets } : {}),
       ...(nextPage ? { nextPage } : {}),
-      ...(rows ? { rows } : {})
+      ...(rows ? { rows } : {}),
+      ...(scale ? { scale } : {})
     });
   }
   return { ok: true, fields };
@@ -812,6 +864,12 @@ export function checkLockedChanges(oldFields: CustomFormField[], newFields: Cust
       const lost = (old.rows ?? []).find((r) => !keptRows.has(r.id));
       if (lost) return `Câu “${old.label}” đã có câu trả lời nên không xoá được phát biểu “${lost.label}” — sửa chữ thì được, hoặc thêm phát biểu mới.`;
     }
+    if (old.type === "linear_scale" && old.scale && now.scale) {
+      // Câu trả lời lưu mức điểm: thu hẹp khoảng là điểm cũ nằm ngoài thang. Mở rộng và sửa nhãn thì được.
+      if (now.scale.min > old.scale.min || now.scale.max < old.scale.max) {
+        return `Câu “${old.label}” đã có câu trả lời nên không thu hẹp được thang điểm ${old.scale.min}–${old.scale.max} — chỉ mở rộng hoặc sửa nhãn.`;
+      }
+    }
   }
   return null;
 }
@@ -837,6 +895,7 @@ function requiredMessage(field: CustomFormField): string {
   if (field.type === "multi_choice") return "Vui lòng chọn ít nhất một lựa chọn.";
   if (field.type === "single_choice" || field.type === "dropdown" || field.type === "yes_no") return "Vui lòng chọn một lựa chọn.";
   if (field.type === "likert_grid") return "Vui lòng chọn một mức cho mỗi hàng.";
+  if (field.type === "linear_scale") return "Vui lòng chọn một mức.";
   return "Vui lòng điền mục này.";
 }
 
@@ -894,6 +953,8 @@ function normalizeAnswer(field: CustomFormField, values: string[]): { value: Cus
     case "dropdown":
     case "yes_no":
       return field.options.includes(value) ? { value } : { error: "Lựa chọn không hợp lệ — tải lại trang rồi chọn lại." };
+    case "linear_scale":
+      return scaleValues(field.scale).includes(value) ? { value } : { error: "Mức điểm không hợp lệ — tải lại trang rồi chọn lại." };
     default:
       return { value: null };
   }
@@ -979,6 +1040,21 @@ export function answerText(value: CustomFormAnswerValue | undefined | null): str
   return value ? String(value) : "";
 }
 
+/**
+ * Ô câu trả lời nào là con số (thang đo tuyến tính): file Excel ghi số thật để cộng, lọc, lấy trung bình được.
+ * CSV và bảng trên màn hình vẫn đọc chữ số như cũ.
+ */
+export function numericAnswerIds(fields: CustomFormField[]): Set<string> {
+  return new Set(fields.filter((f) => f.type === "linear_scale").map((f) => f.id));
+}
+
+/** Giá trị đã lưu của một câu thang đo thành số; rỗng hay hỏng thì null (ô trống thật trong Excel). */
+export function answerNumber(value: CustomFormAnswerValue | undefined | null): number | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw === undefined || raw === null || !/^-?\d+$/.test(String(raw).trim())) return null;
+  return Number(String(raw).trim());
+}
+
 /** Các cột của bảng câu trả lời: mọi câu hỏi, kể cả câu đã ẩn (dữ liệu cũ vẫn phải xem được). */
 export function responseColumns(fields: CustomFormField[]): Array<{ id: string; label: string }> {
   return fields.filter(isQuestion).flatMap((f) => answerCells(f).map((c) => ({ id: c.id, label: f.hidden ? `${c.label} (đã ẩn)` : c.label })));
@@ -1048,6 +1124,7 @@ export function parseDraft(fields: CustomFormField[], raw: string | null, nowMs:
       if (picked.length) values[field.id] = picked;
     } else if (typeof value === "string" && value.trim()) {
       if ((CHOICE_TYPES.has(field.type) || field.type === "yes_no") && !field.options.includes(value)) continue;
+      if (field.type === "linear_scale" && !scaleValues(field.scale).includes(value)) continue;
       values[field.id] = value.slice(0, DRAFT_TEXT_MAX);
     }
   }

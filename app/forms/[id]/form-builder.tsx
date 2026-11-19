@@ -12,6 +12,7 @@ import {
   CUSTOM_FORM_FIELD_TYPES,
   CUSTOM_FORM_STATUS_LABELS,
   CUSTOM_FORMS_PATH,
+  DEFAULT_LINEAR_SCALE,
   FIELD_TYPE_LABELS,
   LIKERT_PRESETS,
   LOGO_POSITIONS,
@@ -35,6 +36,7 @@ import { createEventForFormAction, saveCustomFormAction, sendCustomFormMentorTes
 import { formatDateTime } from "@/lib/utils";
 import { FormImageField } from "./form-image-field";
 import { LikertEditor } from "./likert-editor";
+import { LinearScaleEditor } from "./linear-scale-editor";
 
 const BOX =
   "w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm text-vam-ink outline-none focus:border-vam-green focus:ring-2 focus:ring-vam-mint";
@@ -95,6 +97,12 @@ const toField = ({ optionsText, rowTargets, ...f }: EditableField): CustomFormFi
   const saved: CustomFormField = { ...f, options };
   delete saved.optionTargets;
   delete saved.rows;
+  delete saved.scale;
+  // Thang đo tuyến tính: nhãn hai đầu bỏ khoảng trắng thừa; máy chủ kiểm lại khoảng điểm.
+  if (f.type === "linear_scale") {
+    const scale = f.scale ?? DEFAULT_LINEAR_SCALE;
+    saved.scale = { min: scale.min, max: scale.max, minLabel: scale.minLabel.trim(), maxLabel: scale.maxLabel.trim() };
+  }
   // Lưới thang đo: phát biểu bỏ trống coi như chưa thêm, giống dòng lựa chọn trống.
   if (f.type === "likert_grid") saved.rows = (f.rows ?? []).map((r) => ({ id: r.id, label: r.label.trim() })).filter((r) => r.label);
   if (BRANCHING_CHOICE_TYPES.has(f.type)) {
@@ -212,6 +220,8 @@ export function FormBuilder({
   const lockedOptions = useMemo(() => new Map(form.fields.map((f) => [f.id, f.options])), [form.fields]);
   // Hàng của lưới thang đo đã có câu trả lời: không xoá được (câu trả lời khoá theo mã hàng).
   const lockedGridRows = useMemo(() => new Map(form.fields.map((f) => [f.id, new Set((f.rows ?? []).map((r) => r.id))])), [form.fields]);
+  // Khoảng điểm đã lưu của thang đo tuyến tính: đã có câu trả lời thì chỉ mở rộng được.
+  const lockedScales = useMemo(() => new Map(form.fields.flatMap((f) => (f.scale ? [[f.id, f.scale] as const] : []))), [form.fields]);
 
   const touch = () => {
     setDirty(true);
@@ -276,7 +286,8 @@ export function FormBuilder({
         options: [],
         optionsText: choice ? "Lựa chọn 1\nLựa chọn 2" : grid ? DEFAULT_GRID_COLUMNS : "",
         rowTargets: [],
-        ...(grid ? { rows: defaultGridRows() } : {})
+        ...(grid ? { rows: defaultGridRows() } : {}),
+        ...(newType === "linear_scale" ? { scale: { ...DEFAULT_LINEAR_SCALE } } : {})
       }
     ]);
     touch();
@@ -290,7 +301,8 @@ export function FormBuilder({
       type,
       required: type === "section" ? false : field.required,
       optionsText: choice && !field.optionsText.trim() ? "Lựa chọn 1\nLựa chọn 2" : grid && !field.optionsText.trim() ? DEFAULT_GRID_COLUMNS : field.optionsText,
-      ...(grid && !field.rows?.length ? { rows: defaultGridRows() } : {})
+      ...(grid && !field.rows?.length ? { rows: defaultGridRows() } : {}),
+      ...(type === "linear_scale" && !field.scale ? { scale: { ...DEFAULT_LINEAR_SCALE } } : {})
     });
   };
 
@@ -445,7 +457,7 @@ export function FormBuilder({
       {locked ? (
         <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="locked-note">
           Form đã có {responseCount} câu trả lời: câu hỏi cũ không xoá hay đổi loại được (bấm “Ẩn” để bỏ khỏi form); câu chọn chỉ thêm được lựa chọn
-          mới. Sửa chữ của câu hỏi và thêm câu mới vẫn được.
+          mới; thang đo tuyến tính chỉ mở rộng được khoảng điểm. Sửa chữ của câu hỏi và thêm câu mới vẫn được.
         </p>
       ) : null}
 
@@ -924,6 +936,12 @@ export function FormBuilder({
                     lockedRowIds={fieldLocked ? (lockedGridRows.get(field.id) ?? new Set<string>()) : new Set<string>()}
                     lockedColumns={fieldLocked ? savedOptions : []}
                     onChange={(patch) => updateField(field.id, patch)}
+                  />
+                ) : field.type === "linear_scale" ? (
+                  <LinearScaleEditor
+                    scale={field.scale ?? DEFAULT_LINEAR_SCALE}
+                    locked={fieldLocked ? (lockedScales.get(field.id) ?? null) : null}
+                    onChange={(scale) => updateField(field.id, { scale })}
                   />
                 ) : null}
                 {field.type === "yes_no" ? (
