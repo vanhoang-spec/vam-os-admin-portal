@@ -92,6 +92,8 @@ export default async function MailPage() {
     name: row.name,
     subject: row.subject,
     body: row.body,
+    bodyHtml: row.bodyHtml,
+    sourceTemplateId: row.sourceTemplateId,
     status: row.status,
     updatedAt: formatDateTime(row.updatedAt),
     approverName: row.approverName

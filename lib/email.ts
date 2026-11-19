@@ -62,6 +62,7 @@ import { menteeBookingUrl } from "@/lib/mentee-interview-core";
 import { mentorPickUrl, round2GuidePdfUrl } from "@/lib/matching-round2-link-core";
 import { VONG2_TIMELINE_JPEG_BASE64 } from "@/lib/email-assets/vong-2-timeline";
 import { formatDateTime } from "@/lib/utils";
+import { dungThanThuHtml, laMauThietKe } from "@/lib/mail-soan-thao-core";
 import { menteeConfirmUrl } from "@/lib/mentee-exemption-core";
 import { profileLinkUrl } from "@/lib/match-profile-core";
 import { handbookUrl } from "@/lib/handbook";
@@ -1544,6 +1545,12 @@ export async function sendTemplatedEmail(input: {
   batchId?: string | null;
   /** Tệp đính kèm người gửi tải lên (Mail, VAM00037). Trống / thiếu thì thư đi y như trước. */
   attachments?: EmailAttachment[];
+  /**
+   * Thân thư HTML của mẫu soạn bằng trình thiết kế (VAM00038), ĐÃ LỌC và ĐÃ ĐIỀN ô cho người nhận này
+   * (`renderTemplateHtml`). Có thì phần HTML dựng từ đây (lọc lần cuối + khung 600px); `body` vẫn là
+   * phần chữ thuần. Thiếu / rỗng thì thư đi y như trước, HTML dựng từ chữ bằng `textToHtmlEmail`.
+   */
+  html?: string | null;
 }): Promise<SendEmailResult> {
   const subject = String(input.subject ?? "").replace(/[\r\n]+/g, " ").trim();
   const body = String(input.body ?? "").trim();
@@ -1557,7 +1564,7 @@ export async function sendTemplatedEmail(input: {
       to: input.toEmail,
       subject,
       text: body,
-      html: textToHtmlEmail(body),
+      html: laMauThietKe(input.html) ? dungThanThuHtml(input.html) : textToHtmlEmail(body),
       ...(input.attachments?.length ? { attachments: input.attachments } : {})
     },
     input.relation ?? null,

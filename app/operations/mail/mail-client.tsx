@@ -1,7 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useFormState, useFormStatus } from "react-dom";
+import { copyEmailTemplateAction } from "@/app/actions/email-templates";
+import {
+  initialEmailTemplateActionState,
+  type EmailTemplateActionState
+} from "@/lib/email-template-action-types";
 import {
   TEMPLATE_KINDS,
   TEMPLATE_SPECS,
@@ -29,6 +35,19 @@ function StatusBadge({ status }: { status: EditableTemplate["status"] }) {
   );
 }
 
+function StartFromButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="rounded-md border border-vam-line bg-white px-3 py-1.5 text-sm font-medium text-vam-ink transition-colors hover:bg-slate-50 disabled:opacity-60"
+    >
+      {pending ? "Đang tạo…" : "Soạn từ mẫu"}
+    </button>
+  );
+}
+
 /**
  * Danh sách mẫu thư và trình soạn, cạnh nhau.
  *
@@ -50,6 +69,12 @@ export function MailClient({
   const [composingKind, setComposingKind] = useState<TemplateKind | null>(null);
 
   const open = templates.find((row) => row.id === openId) ?? null;
+  const nameOf = (id: string | null | undefined) =>
+    id ? templates.find((row) => row.id === id)?.name ?? null : null;
+
+  // "Soạn từ mẫu đã lưu" (VAM00038): tạo bản nháp chép từ mẫu đã chọn rồi mở nó ra.
+  const [startState, startAction] = useFormState(copyEmailTemplateAction, initialEmailTemplateActionState);
+  const startHandledRef = useRef<EmailTemplateActionState | null>(null);
 
   // Lưu xong thì đọc lại danh sách từ máy chủ. `router.refresh` giữ nguyên chỗ
   // đang đứng, khác với việc điều hướng lại — người soạn không bị hất về đầu
@@ -57,6 +82,21 @@ export function MailClient({
   const handleDone = useCallback(() => {
     router.refresh();
   }, [router]);
+
+  const openTemplate = useCallback(
+    (id: string) => {
+      router.refresh();
+      setComposingKind(null);
+      setOpenId(id);
+    },
+    [router]
+  );
+
+  useEffect(() => {
+    if (!startState.ok || !startState.templateId || startHandledRef.current === startState) return;
+    startHandledRef.current = startState;
+    openTemplate(startState.templateId);
+  }, [startState, openTemplate]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -82,7 +122,36 @@ export function MailClient({
                 Soạn {TEMPLATE_SPECS[kind].label.toLowerCase()}
               </button>
             ))}
+            {templates.length ? (
+              <form action={startAction} className="flex flex-wrap items-center gap-2">
+                <label htmlFor="start-from-template" className="sr-only">
+                  Mẫu đã lưu để soạn thư mới
+                </label>
+                <select
+                  id="start-from-template"
+                  name="template_id"
+                  defaultValue=""
+                  required
+                  className="max-w-[14rem] rounded-md border border-vam-line bg-white px-2 py-1.5 text-sm"
+                >
+                  <option value="" disabled>
+                    Chọn mẫu đã lưu…
+                  </option>
+                  {templates.map((row) => (
+                    <option key={row.id} value={row.id}>
+                      {row.name}
+                    </option>
+                  ))}
+                </select>
+                <StartFromButton />
+              </form>
+            ) : null}
           </div>
+          {startState.message && !startState.ok ? (
+            <p role="alert" className="w-full text-xs text-red-800">
+              {startState.message}
+            </p>
+          ) : null}
         </header>
 
         {templates.length ? (
@@ -123,9 +192,10 @@ export function MailClient({
                       <TemplateEditor
                         key={row.id}
                         kind={row.kind}
-                        template={row}
+                        template={{ ...row, sourceName: nameOf(row.sourceTemplateId) }}
                         canApprove={canApprove}
                         onDone={handleDone}
+                        onOpenTemplate={openTemplate}
                       />
                     </div>
                   ) : null}

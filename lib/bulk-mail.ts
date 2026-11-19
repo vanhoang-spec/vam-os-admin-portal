@@ -39,7 +39,8 @@ import { escapeIlikePattern } from "@/lib/identity";
 import { readAllPages, readAllPagesIn, readBounded } from "@/lib/paged-read";
 import { formatDate } from "@/lib/utils";
 import { displayCurrentMemberCode } from "@/lib/member-code-core";
-import { renderTemplate, type TemplateKind } from "@/lib/email-templates-core";
+import { renderTemplate, renderTemplateHtml, type TemplateKind } from "@/lib/email-templates-core";
+import { laMauThietKe, locHtmlThu } from "@/lib/mail-soan-thao-core";
 import { sendTemplatedEmail } from "@/lib/email";
 import { tepCuaLo } from "@/lib/mail-dinh-kem";
 import { getSupabaseServiceRoleClient } from "@/lib/supabase-server";
@@ -1414,6 +1415,8 @@ export async function runEmailBatch(input: {
   seasonCode: string;
   subject: string;
   body: string;
+  /** HTML đã lưu của mẫu thiết kế (VAM00038). null / thiếu = thư chữ thuần, đi y như trước. */
+  bodyHtml?: string | null;
   now?: () => number;
 }): Promise<BulkRunResult> {
   const client = getSupabaseServiceRoleClient();
@@ -1516,20 +1519,28 @@ export async function runEmailBatch(input: {
   let skipped = 0;
   const problems: string[] = [];
 
+  // Lọc lại HTML đã lưu MỘT lần cho cả lượt chạy, trước khi điền ô: cột trong database là thứ một
+  // đường ghi khác (hay một tay sửa SQL) cũng chạm được, không chỉ server action đã lọc nó.
+  const richHtml = laMauThietKe(input.bodyHtml) ? locHtmlThu(input.bodyHtml) : null;
+
   for (const recipient of pending) {
     if (sent + failed + skipped >= runCap) break;
     if (now() - startedAt >= BULK_TIME_BUDGET_MS) break;
 
-    const filled = renderTemplate({
+    const values = buildRecipientValues({
+      kind: input.batch.kind,
+      recipient,
+      seasonCode: input.seasonCode
+    });
+    const text = renderTemplate({
       kind: input.batch.kind,
       subject: input.subject,
       body: input.body,
-      values: buildRecipientValues({
-        kind: input.batch.kind,
-        recipient,
-        seasonCode: input.seasonCode
-      })
+      values
     });
+    // Phần HTML điền cùng bộ giá trị của chính người nhận này; thiếu ô thì chặn y như phần chữ.
+    const html = richHtml ? renderTemplateHtml({ kind: input.batch.kind, html: richHtml, values }) : null;
+    const filled = !text.ok ? text : html && !html.ok ? html : text;
 
     if (!filled.ok) {
       // Thiếu dữ liệu cho một ô: bức thư này không đi, và không có dòng nào ghi
@@ -1545,6 +1556,7 @@ export async function runEmailBatch(input: {
       toEmail: recipient.email,
       subject: filled.subject,
       body: filled.body,
+      ...(html?.ok ? { html: html.html } : {}),
       relation: outboundRelationFor(recipient),
       batchId: input.batch.id,
       ...(dinhKem.attachments.length ? { attachments: dinhKem.attachments } : {})

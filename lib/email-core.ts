@@ -321,7 +321,7 @@ export function isSafeAppLink(url: string, baseUrl: string): boolean {
 }
 
 const SIGNATURE_TEXT = "Ban tổ chức UEH Mentoring\nVietnam Alumni Mentoring";
-const SIGNATURE_HTML =
+export const SIGNATURE_HTML =
   '<p style="margin:24px 0 0;color:#4f6b60;font-size:13px;line-height:20px">Ban tổ chức UEH Mentoring<br />Vietnam Alumni Mentoring</p>';
 
 /**

@@ -15,7 +15,10 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/app/actions/email-templates", () => ({
   saveEmailTemplateAction: vi.fn(),
   approveEmailTemplateAction: vi.fn(),
-  archiveEmailTemplateAction: vi.fn()
+  archiveEmailTemplateAction: vi.fn(),
+  copyEmailTemplateAction: vi.fn(),
+  updateSourceTemplateAction: vi.fn(),
+  requestMailImageUploadAction: vi.fn()
 }));
 vi.mock("react-dom", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
