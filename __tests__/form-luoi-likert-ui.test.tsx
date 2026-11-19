@@ -29,6 +29,7 @@ vi.mock("@/app/forms/actions", () => ({
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: h.refresh, push: vi.fn() }), redirect: vi.fn(), notFound: vi.fn() }));
 
 import { PublicForm } from "@/app/f/[code]/public-form";
+import { LIKERT_TABLE_MAX_COLUMNS, likertTableMinWidth } from "@/app/f/[code]/likert-grid";
 import { FormBuilder, type BuilderForm } from "@/app/forms/[id]/form-builder";
 
 const CODE = "a1b2c3d4e5f6";
@@ -138,17 +139,42 @@ describe("1b. bố cục theo số mức: nhiều mức thì dạng thẻ, khôn
   };
   const smClasses = (el: Element) => Array.from(el.classList).filter((c) => c.startsWith("sm:"));
 
-  it("8 mức: vẫn là bảng từ sm — hàng tiêu đề, hàng lưới theo --likert-cols, chữ mức chỉ cho trình đọc màn hình", () => {
+  it("8 mức: bảng ở mọi cỡ màn hình — hàng tiêu đề luôn hiện, hàng lưới theo --likert-cols, chữ mức chỉ cho trình đọc màn hình (VAM00035)", () => {
     const { container } = render(<PublicForm code={CODE} fields={[gridOf(8)]} />);
     const p = parts(container);
     expect(p.grid.getAttribute("data-layout")).toBe("table");
     expect(p.grid.style.getPropertyValue("--likert-cols")).toContain("repeat(8,");
     expect(p.header).not.toBeNull();
-    expect(p.header!.classList.contains("sm:grid")).toBe(true);
-    expect(p.row.classList.contains("sm:[grid-template-columns:var(--likert-cols)]")).toBe(true);
-    expect(p.options.classList.contains("sm:contents")).toBe(true);
+    // Không lớp nào đổi bố cục theo cỡ màn hình: điện thoại trình bày như laptop.
+    expect(smClasses(p.grid)).toEqual([]);
+    expect(smClasses(p.header!)).toEqual([]);
+    expect(p.header!.classList.contains("hidden")).toBe(false);
+    expect(p.header!.classList.contains("[grid-template-columns:var(--likert-cols)]")).toBe(true);
+    expect(smClasses(p.row)).toEqual([]);
+    expect(p.row.classList.contains("[grid-template-columns:var(--likert-cols)]")).toBe(true);
     expect(p.optionTexts).toHaveLength(8);
-    for (const t of p.optionTexts) expect(t.classList.contains("sm:sr-only")).toBe(true);
+    for (const t of p.optionTexts) expect(Array.from(t.classList)).toEqual(["sr-only"]);
+  });
+
+  it("màn hẹp: chỉ khung lưới cuộn ngang, bảng giữ bề rộng tối thiểu, cột phát biểu đứng yên bên trái (VAM00035)", () => {
+    const { container } = render(<PublicForm code={CODE} fields={[gridOf(5)]} />);
+    const p = parts(container);
+    expect(p.grid.classList.contains("overflow-x-auto")).toBe(true);
+    const table = p.grid.querySelector('[data-testid="likert-table"]') as HTMLElement;
+    expect(table.style.minWidth).toBe(likertTableMinWidth(5));
+    expect(likertTableMinWidth(5)).toBe("23.25rem");
+    const statement = p.row.querySelector('[data-testid="likert-statement"]') as HTMLElement;
+    expect(statement.classList.contains("sticky")).toBe(true);
+    expect(statement.classList.contains("left-0")).toBe(true);
+    // Nền của cột phát biểu trùng nền hàng, để ô mức cuộn qua không lộ dưới chữ.
+    expect(statement.classList.contains("bg-white") || statement.classList.contains("bg-slate-50")).toBe(true);
+    // Mỗi ô mức cao ít nhất 44px cho ngón tay.
+    for (const cell of Array.from(p.row.querySelectorAll('[data-testid="likert-cell"]'))) expect(cell.classList.contains("min-h-11")).toBe(true);
+  });
+
+  it("8 mức vẫn vừa khung form trên laptop (thẻ form còn khoảng 576px): bảng không buộc cuộn ngang", () => {
+    // 1rem = 16px. Đệm trang + đệm thẻ ở màn 640px còn khoảng 576px.
+    expect(parseFloat(likertTableMinWidth(LIKERT_TABLE_MAX_COLUMNS)) * 16).toBeLessThanOrEqual(576);
   });
 
   for (const n of [9, 11]) {
