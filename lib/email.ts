@@ -48,6 +48,7 @@ import {
   reviewerInviteSubject,
   staffInviteSubject,
   type EmailKind,
+  type EmailAttachment,
   type EmailMessage,
   type EmailProvider
 } from "@/lib/email-core";
@@ -359,10 +360,10 @@ async function sendViaBrevo(input: {
         htmlContent: input.message.html,
         ...(input.message.attachments?.length
           ? {
-              attachment: input.message.attachments.map((file) => ({
-                name: file.filename,
-                content: file.contentBase64
-              }))
+              attachment: input.message.attachments.map((file) =>
+                // Tệp tải lên (VAM00037) đi bằng URL ký sẵn: Brevo tự lấy tệp, thân yêu cầu không phình theo tệp.
+                file.url ? { name: file.filename, url: file.url } : { name: file.filename, content: file.contentBase64 }
+              )
             }
           : {}),
         ...(input.replyTo ? { replyTo: { email: input.replyTo } } : {})
@@ -426,7 +427,8 @@ async function sendViaResend(input: {
           ? {
               attachments: input.message.attachments.map((file) => ({
                 filename: file.filename,
-                content: file.contentBase64,
+                // Tệp tải lên (VAM00037): Resend tự lấy theo `path` (URL ký sẵn).
+                ...(file.url ? { path: file.url } : { content: file.contentBase64 }),
                 // Ảnh nhúng trong thân thư (thân thư trỏ cid:…) — Resend REST nhận content_id.
                 ...(file.contentId ? { content_id: file.contentId } : {}),
                 ...(file.contentType ? { content_type: file.contentType } : {})
@@ -1540,6 +1542,8 @@ export async function sendTemplatedEmail(input: {
   body: string;
   relation?: EmailRelation | null;
   batchId?: string | null;
+  /** Tệp đính kèm người gửi tải lên (Mail, VAM00037). Trống / thiếu thì thư đi y như trước. */
+  attachments?: EmailAttachment[];
 }): Promise<SendEmailResult> {
   const subject = String(input.subject ?? "").replace(/[\r\n]+/g, " ").trim();
   const body = String(input.body ?? "").trim();
@@ -1549,7 +1553,13 @@ export async function sendTemplatedEmail(input: {
 
   return deliver(
     input.kind,
-    { to: input.toEmail, subject, text: body, html: textToHtmlEmail(body) },
+    {
+      to: input.toEmail,
+      subject,
+      text: body,
+      html: textToHtmlEmail(body),
+      ...(input.attachments?.length ? { attachments: input.attachments } : {})
+    },
     input.relation ?? null,
     input.batchId ?? null
   );

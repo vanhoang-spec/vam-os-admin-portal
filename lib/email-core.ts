@@ -106,16 +106,30 @@ export type EmailKind =
  * `contentBase64` chứ không phải Buffer: cả hai nhà cung cấp đều nhận base64
  * qua JSON, và giữ nguyên dạng đó tránh một vòng chuyển đổi ở mỗi transport.
  */
-export type EmailAttachment = {
-  filename: string;
-  contentBase64: string;
-  /**
-   * Ảnh nhúng trong thân thư: thân thư trỏ `<img src="cid:…">` tới mã này (BTC 15/10/2026, hình
-   * timeline thư mời Vòng 2). Chỉ Resend nhúng được (`content_id`); qua Brevo ảnh thành tệp đính kèm.
-   */
-  contentId?: string;
-  contentType?: string;
-};
+export type EmailAttachment =
+  | {
+      filename: string;
+      contentBase64: string;
+      url?: undefined;
+      /**
+       * Ảnh nhúng trong thân thư: thân thư trỏ `<img src="cid:…">` tới mã này (BTC 15/10/2026, hình
+       * timeline thư mời Vòng 2). Chỉ Resend nhúng được (`content_id`); qua Brevo ảnh thành tệp đính kèm.
+       */
+      contentId?: string;
+      contentType?: string;
+    }
+  | {
+      /**
+       * Tệp người gửi tải lên từ thiết bị (Mail, VAM00037): nằm trong kho riêng, `url` là link tải
+       * ký sẵn ngắn hạn mà NHÀ CUNG CẤP tự lấy (Brevo `attachment.url`, Resend `attachments.path`).
+       * Máy chủ VAM không cầm byte của tệp — xem lib/mail-dinh-kem-core.ts.
+       */
+      filename: string;
+      url: string;
+      contentBase64?: undefined;
+      contentId?: undefined;
+      contentType?: string;
+    };
 
 export type EmailMessage = {
   to: string;

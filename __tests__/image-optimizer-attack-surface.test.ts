@@ -118,6 +118,24 @@
  *   - Only text comes back (email + name lines); nothing is stored or served from the file.
  *
  * Section 3 and 3b pin this path.
+ *
+ * RE-CLASSIFIED 19/11/2026 for Mail attachments uploaded from the device (VAM00037: "chọn và tải tệp
+ * từ thiết bị; nhiều tệp trong một email"), PENDING the programme owner's sign-off in the PR. It is the
+ * third bucket and the first that holds arbitrary documents (and photos) sent on to recipients. The
+ * decoder stays unreachable for the same reasons as 3c, and this server never holds the bytes at all:
+ *
+ *   - Only super_admin/admin with an operations scope on the season can mint upload links (the same
+ *     authorize() as the bulk-send button). The browser PUTs each file STRAIGHT to a third private bucket
+ *     ('mail-dinh-kem', 10 MB cap, an allowlist of document/photo MIME types with no executable, script,
+ *     macro, HTML/SVG or archive type, supabase/migrations/20261119120000_mail_dinh_kem.sql) for a
+ *     server-generated path inside <season>/<that account>/.
+ *   - The server reads only storage METADATA (`list`: size and MIME) to re-check what the browser
+ *     claimed, may `remove` an unsent file, and at send time mints short-lived signed download URLs that
+ *     the mail PROVIDER fetches (Brevo `attachment.url`, Resend `attachments.path`). Nothing here
+ *     downloads, decodes, re-encodes or serves the files; nothing goes through next/image.
+ *   - That bucket is touched in exactly one server-only file (lib/mail-dinh-kem.ts).
+ *
+ * Section 3e pins this path.
  */
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { join } from "path";
@@ -220,11 +238,11 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
     expect(existsSync(join(repoRoot, "public"))).toBe(false);
   });
 
-  it("object storage is touched only by the Báo lỗi and form image modules (sections 3c, 3d)", () => {
+  it("object storage is touched only by the Báo lỗi, form image and Mail attachment modules (sections 3c, 3d, 3e)", () => {
     const offenders = sourceFiles()
       .filter((file) => /storage\s*\.\s*from\(|createSignedUrl|getPublicUrl/.test(readFileSync(file, "utf8")))
       .map(relative);
-    expect(offenders.sort()).toEqual(["lib/bao-loi-anh.ts", "lib/custom-form-anh.ts"]);
+    expect(offenders.sort()).toEqual(["lib/bao-loi-anh.ts", "lib/custom-form-anh.ts", "lib/mail-dinh-kem.ts"]);
   });
 
   it("file uploads are the two CSV importers, the AI tools' single input and the interview Handbook input", () => {
@@ -245,6 +263,8 @@ describe("3. no same-origin path can serve attacker-controlled image bytes", () 
       "app/interviews/phieu-cham-mentee/handbook-upload.tsx",
       // Mail › external-recipient Excel list (VAM00027) — pinned in 3b.
       "app/operations/mail/external-email-file.tsx",
+      // Mail › attachments from the device (VAM00037) — browser-only bytes, pinned in section 3e.
+      "app/operations/mail/mail-attachments.tsx",
       // Báo lỗi screenshots — browser-only bytes, pinned in section 3c.
       "components/bao-loi/chon-anh.tsx"
     ]);
@@ -429,6 +449,37 @@ describe("3d. form banners and logos never reach this server or the optimizer", 
 
   it("no form screen renders an image through next/image", () => {
     for (const source of [field, header]) expect(source).not.toContain("next/image");
+  });
+});
+
+describe("3e. Mail attachments never reach this server or the optimizer", () => {
+  const kho = readFileSync(join(repoRoot, "lib/mail-dinh-kem.ts"), "utf8");
+  const chon = readFileSync(join(repoRoot, "app/operations/mail/mail-attachments.tsx"), "utf8");
+  const migration = readFileSync(join(repoRoot, "supabase/migrations/20261119120000_mail_dinh_kem.sql"), "utf8");
+
+  it("the storage module is server-only and only mints signed URLs, reads metadata and removes, on the one private bucket", () => {
+    expect(kho).toMatch(/^import "server-only";/);
+    expect(kho.match(/storage\s*\.from\(MAIL_DINH_KEM_BUCKET\)/g)).toHaveLength(4);
+    expect(kho).toContain(".createSignedUploadUrl(path)");
+    expect(kho).toContain(".list(folder, { limit: 5 })");
+    expect(kho).toContain(".remove([input.path])");
+    expect(kho).toMatch(/\.createSignedUrls\(files\.map\(\(file\) => file\.path\), LINK_NHA_CUNG_CAP_GIAY\)/);
+    expect(kho).not.toMatch(/\.upload\(|\.download\(|getPublicUrl|arrayBuffer|Buffer\.|new Response|NextResponse|sharp/);
+    expect(kho).not.toMatch(/storage\s*\.from\((?!MAIL_DINH_KEM_BUCKET\))/);
+  });
+
+  it("the bucket is private, capped at 10 MB, and accepts no executable, script, markup or archive type", () => {
+    expect(migration).toMatch(/values \('mail-dinh-kem', 'mail-dinh-kem', false, 10485760, array\[/);
+    expect(migration).toMatch(/on conflict \(id\) do update set public = false/);
+    expect(migration).not.toMatch(/create policy/i);
+    expect(migration).not.toMatch(/'image\/svg|text\/html|javascript|x-msdownload|x-sh|zip|macroEnabled/i);
+  });
+
+  it("the browser uploads straight to the signed URL; the input takes its accept list from the allowlist", () => {
+    expect(chon).toContain("accept={MAIL_DINH_KEM_ACCEPT}");
+    expect(chon.match(/accept=/g)).toHaveLength(1);
+    expect(chon).toMatch(/fetch\(link\.signedUrl, \{\s*method: "PUT"/);
+    expect(chon).not.toMatch(/arrayBuffer\(\)|\.stream\(\)|FormData|next\/image/);
   });
 });
 

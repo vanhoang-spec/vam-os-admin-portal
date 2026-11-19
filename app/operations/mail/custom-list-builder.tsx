@@ -30,6 +30,7 @@ import {
   startCustomBulkSendAction
 } from "@/app/actions/bulk-mail";
 import { ExternalEmailFileForm } from "./external-email-file";
+import { MailAttachmentsField, type MailAttachment } from "./mail-attachments";
 
 function Button({ label, busyLabel, disabled, quiet }: { label: string; busyLabel: string; disabled?: boolean; quiet?: boolean }) {
   const { pending } = useFormStatus();
@@ -99,10 +100,16 @@ const checkboxClass = "mt-0.5 h-4 w-4 rounded border-slate-300 text-vam-green fo
  */
 export function CustomListBuilder({
   templateId,
-  eventOptions
+  eventOptions,
+  attachments = [],
+  attachmentsBusy = false
 }: {
   templateId: string;
   eventOptions: BulkEventOption[];
+  /** Tệp đính kèm chọn ở khung "Tệp đính kèm" của trang (VAM00037); form gửi mang chúng đi. */
+  attachments?: MailAttachment[];
+  /** Đang tải tệp lên thì chưa cho gửi: gửi lúc đó là thư thiếu tệp. */
+  attachmentsBusy?: boolean;
 }) {
   const [mentor, setMentor] = useState(false);
   const [mentee, setMentee] = useState(false);
@@ -423,13 +430,15 @@ export function CustomListBuilder({
           <form action={sendAction} className="flex flex-col gap-3 border-t border-vam-line pt-3" data-testid="custom-send-form">
             <input type="hidden" name="template_id" value={templateId} />
             <input type="hidden" name="audience" value="custom" />
+            <MailAttachmentsField files={attachments} />
             <SpecFields spec={spec} signature={signature} externalText={externalText} />
             {included.map((row) => (
               <input key={row.key} type="hidden" name="recipient_key" value={row.key} />
             ))}
             <p className="text-sm text-vam-ink">
               Sắp gửi <strong className="text-vam-green">{included.length}</strong> lá thư cho danh sách tùy chỉnh. Danh sách
-              này được chốt vào lô: “Gửi tiếp” chỉ gửi cho đúng những người trên. Thư đã gửi không thu hồi được.
+              này được chốt vào lô: “Gửi tiếp” chỉ gửi cho đúng những người trên
+              {attachments.length ? `, mỗi thư kèm ${attachments.length} tệp` : ""}. Thư đã gửi không thu hồi được.
             </p>
             {blockedNameless ? (
               <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800" data-testid="custom-nameless-block">
@@ -469,7 +478,12 @@ export function CustomListBuilder({
               <Button
                 label="Bắt đầu gửi"
                 busyLabel="Đang gửi…"
-                disabled={included.length === 0 || blockedNameless > 0 || (includedExternal > 0 && !externalChecked)}
+                disabled={
+                  included.length === 0 ||
+                  blockedNameless > 0 ||
+                  (includedExternal > 0 && !externalChecked) ||
+                  attachmentsBusy
+                }
               />
             </div>
           </form>
