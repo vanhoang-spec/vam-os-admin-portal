@@ -310,24 +310,27 @@ export type BulkEventOption = {
  * trước khi Vercel cắt. Lô còn dư thì lần chạy sau đi tiếp — trạng thái nằm
  * trong `outbound_emails`, không nằm trong bộ nhớ của tiến trình.
  *
- * 100 (trước 20/11/2026 là 25): đo 6.794 thư hàng loạt qua Resend trong 45
- * ngày, mỗi thư ~0,35 giây (p90 0,38), không lá nào lỗi — 100 thư ≈ 35 giây.
- * Thứ thật sự giữ một lần chạy trong giới hạn là BULK_TIME_BUDGET_MS bên dưới;
- * con số này chỉ là trần, để một lần bấm không đi quá xa khi nhà cung cấp nhanh
- * bất thường. Lô 509 thư từng phải bấm "Gửi tiếp" 21 lần.
+ * 85 (trước 20/11/2026 là 25): đo 6.794 thư hàng loạt qua Resend trong 45
+ * ngày, mỗi thư ~0,35 giây (p90 0,38), không lá nào lỗi — 85 thư ≈ 30 giây,
+ * vừa ngân sách BULK_TIME_BUDGET_MS bên dưới. Ngân sách mới là thứ thật sự giữ
+ * một lần chạy trong giới hạn; con số này là trần, để một lần bấm không đi quá
+ * xa khi nhà cung cấp nhanh bất thường. Lô 509 thư từng phải bấm "Gửi tiếp" 21
+ * lần; nay 6 lần, hoặc một lần "Gửi tiếp tới hết".
  */
-export const BULK_SEND_CHUNK = 100;
+export const BULK_SEND_CHUNK = 85;
 
 /**
  * Ngân sách thời gian của một lần chạy: hết ngân sách thì KHÔNG BẮT ĐẦU thư mới.
  *
  * Tính từ lúc lệnh bắt đầu (cả phần dựng danh sách, mở lô), không chỉ từ vòng
- * gửi. 35 giây = `maxDuration` 60 giây của trang Mail − 20 giây một lời gọi nhà
- * cung cấp có thể treo (TRANSPORT_TIMEOUT_MS) − 5 giây cho dòng ghi sổ cuối và
- * cập nhật lô. Bị cắt giữa chừng nghĩa là dòng ghi sổ của bức thư cuối không
- * kịp viết xong, và bức thư đó biến mất khỏi mọi câu trả lời cho "đã gửi cho ai".
+ * gửi. 30 giây = `maxDuration` 60 giây của trang Mail − 20 giây một lời gọi nhà
+ * cung cấp có thể treo (TRANSPORT_TIMEOUT_MS) − 10 giây cho dòng ghi sổ cuối,
+ * cập nhật lô, và phần vẽ lại trang Mail (revalidatePath đếm người nhận của mọi
+ * nhóm, chạy trong CÙNG request khi bấm tay). Bị cắt giữa chừng nghĩa là dòng
+ * ghi sổ của bức thư cuối không kịp viết xong, và bức thư đó biến mất khỏi mọi
+ * câu trả lời cho "đã gửi cho ai".
  */
-export const BULK_TIME_BUDGET_MS = 35_000;
+export const BULK_TIME_BUDGET_MS = 30_000;
 
 /**
  * Người nhận thuộc về dòng dữ liệu nào — để sổ thư nối lá thư về đúng chỗ.
@@ -560,6 +563,7 @@ export function describeRunResult(input: {
   skipped: number;
   remaining: number;
   rateLimited?: boolean;
+  providerTrouble?: boolean;
 }): string {
   const parts = [`Đã gửi ${input.sent} thư`];
   if (input.skipped) parts.push(`${input.skipped} thư bị cấu hình chặn`);
@@ -567,7 +571,10 @@ export function describeRunResult(input: {
 
   const head = parts.join(", ") + ".";
   if (input.rateLimited) {
-    return `${head} Nhà cung cấp email báo chạm giới hạn gửi nên đã dừng. Còn ${input.remaining} người chưa nhận — chờ ít phút rồi bấm “Gửi tiếp”.`;
+    return `${head} Nhà cung cấp email báo chạm giới hạn gửi nên đã dừng. Còn ${input.remaining} người chưa nhận — chờ ít phút (nếu là hạn mức trong ngày thì chờ sang ngày) rồi bấm “Gửi tiếp”.`;
+  }
+  if (input.providerTrouble) {
+    return `${head} Nhiều thư lỗi liên tiếp nên đã dừng để không ghi lỗi cả lô. Còn ${input.remaining} người chưa nhận — kiểm Nhật ký gửi rồi bấm “Gửi tiếp”.`;
   }
   if (input.remaining > 0) {
     return `${head} Còn ${input.remaining} người chưa nhận — bấm “Gửi tiếp” để đi tiếp.`;
@@ -578,7 +585,15 @@ export function describeRunResult(input: {
 /** Trần số lần chạy của một lượt "Gửi tiếp tới hết": 60 × BULK_SEND_CHUNK là hơn hạn mức cả ngày. */
 export const AUTO_CONTINUE_MAX_ROUNDS = 60;
 
-export type AutoContinueStep = "continue" | "done" | "stopped" | "error" | "rate_limited" | "stuck" | "round_limit";
+export type AutoContinueStep =
+  | "continue"
+  | "done"
+  | "stopped"
+  | "error"
+  | "rate_limited"
+  | "provider_trouble"
+  | "stuck"
+  | "round_limit";
 
 /**
  * Sau mỗi lần chạy, nút "Gửi tiếp tới hết" có bấm tiếp hay không.
@@ -593,11 +608,13 @@ export function autoContinueStep(input: {
   remaining?: number;
   processed?: number;
   rateLimited?: boolean;
+  providerTrouble?: boolean;
   stopRequested: boolean;
   round: number;
 }): AutoContinueStep {
   if (!input.ok) return "error";
   if (input.rateLimited) return "rate_limited";
+  if (input.providerTrouble) return "provider_trouble";
   if (typeof input.remaining !== "number" || !Number.isFinite(input.remaining)) return "error";
   if (input.remaining <= 0) return "done";
   if (!input.processed || input.processed <= 0) return "stuck";
@@ -612,6 +629,7 @@ export const AUTO_CONTINUE_END_WORDS: Record<Exclude<AutoContinueStep, "continue
   stopped: "Đã dừng theo yêu cầu. Phần còn lại vẫn nằm trong lô.",
   error: "Đã dừng vì lần chạy vừa rồi báo lỗi.",
   rate_limited: "Đã dừng vì nhà cung cấp email báo chạm giới hạn gửi. Chờ ít phút rồi bấm lại.",
-  stuck: "Đã dừng vì lần chạy vừa rồi không gửi thêm được lá nào.",
+  provider_trouble: "Đã dừng vì nhiều thư lỗi liên tiếp. Kiểm Nhật ký gửi trước khi bấm lại.",
+  stuck: "Đã dừng vì lần chạy vừa rồi không gửi thêm được lá nào (thường do thiếu dữ liệu điền ô của vài người).",
   round_limit: "Đã dừng sau số lần chạy tối đa của một lượt. Bấm lại để đi tiếp."
 };

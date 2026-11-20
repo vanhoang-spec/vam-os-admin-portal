@@ -1,7 +1,8 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { useRouter } from "next/navigation";
 import {
   AUTO_CONTINUE_END_WORDS,
   autoContinueStep,
@@ -35,21 +36,49 @@ function GuiTiepButton({ disabled }: { disabled: boolean }) {
  * tab này. Vì thế nút "Gửi tiếp" thường bị khoá trong lúc đang tự chạy. Đóng tab là dừng; phần còn
  * lại vẫn nằm trong lô.
  *
- * Khi nào dừng: xem `autoContinueStep` — chỉ đi tiếp khi lần vừa rồi chắc chắn tiến được.
+ * Khi nào dừng: xem `autoContinueStep` — chỉ đi tiếp khi lần vừa rồi chắc chắn tiến được. Component
+ * bị gỡ (đổi trang trong app, hoặc lô xong và rời danh sách "đang gửi dở") cũng là lệnh dừng: không
+ * có vòng nào chạy ngầm mà không còn nút Dừng.
+ *
+ * Mỗi vòng gửi `tu_dong=1` để máy chủ không vẽ lại trang sau từng lần chạy (phần vẽ lại ăn vào
+ * thời gian của lần gửi); vòng tự làm mới trang MỘT lần khi dừng. Câu báo cuối đi lên `onEnd` vì
+ * lô xong thì chính component này rời màn hình.
  */
 export function GuiTiepControls({
   batchId,
-  continueAction
+  continueAction,
+  onEnd
 }: {
   batchId: string;
   continueAction: (formData: FormData) => void;
+  /** Câu báo khi lượt tự gửi dừng — panel cha giữ nó lại sau khi lô rời danh sách. */
+  onEnd?: (state: BulkMailActionState) => void;
 }) {
+  const router = useRouter();
   const [running, setRunning] = useState(false);
   const [processedTotal, setProcessedTotal] = useState(0);
   const [last, setLast] = useState<BulkMailActionState | null>(null);
-  const [ended, setEnded] = useState<Exclude<AutoContinueStep, "continue"> | null>(null);
   const stopRequested = useRef(false);
   const busy = useRef(false);
+
+  // Gỡ khỏi màn hình = dừng sau lần chạy đang dở.
+  useEffect(
+    () => () => {
+      stopRequested.current = true;
+    },
+    []
+  );
+
+  // Đóng tab / tải lại trong lúc tự chạy: trình duyệt hỏi lại. Phần còn lại vẫn nằm trong lô.
+  useEffect(() => {
+    if (!running) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [running]);
 
   async function runToEnd() {
     // Chặn bấm đúp trước cả khi React kịp vẽ lại nút: hai vòng lặp song song là hai lần chạy chồng nhau.
@@ -57,15 +86,17 @@ export function GuiTiepControls({
     busy.current = true;
     stopRequested.current = false;
     setRunning(true);
-    setEnded(null);
     setLast(null);
     setProcessedTotal(0);
 
     let total = 0;
+    let endState: BulkMailActionState | null = null;
+    let endStep: Exclude<AutoContinueStep, "continue"> = "error";
     try {
       for (let round = 0; ; round += 1) {
         const formData = new FormData();
         formData.set("batch_id", batchId);
+        formData.set("tu_dong", "1");
         const result = await continueBulkSendAction(initialBulkMailActionState, formData);
         total += result.processed ?? 0;
         setProcessedTotal(total);
@@ -76,21 +107,33 @@ export function GuiTiepControls({
           remaining: result.remaining,
           processed: result.processed,
           rateLimited: result.rateLimited,
+          providerTrouble: result.providerTrouble,
           stopRequested: stopRequested.current,
           round
         });
         if (step !== "continue") {
-          setEnded(step);
+          endStep = step;
+          endState = result;
           break;
         }
       }
     } catch (error) {
       console.error("[GuiTiepControls]", error);
-      setEnded("error");
-      setLast({ ...initialBulkMailActionState, message: "Mất kết nối với máy chủ. Phần còn lại vẫn nằm trong lô." });
+      endStep = "error";
+      endState = { ...initialBulkMailActionState, message: "Mất kết nối với máy chủ. Phần còn lại vẫn nằm trong lô." };
     } finally {
       busy.current = false;
       setRunning(false);
+      onEnd?.({
+        ok: endStep === "done",
+        message: `${AUTO_CONTINUE_END_WORDS[endStep]} Lượt tự gửi đã xử lý ${total} thư.${
+          endState?.message ? ` ${endState.message}` : ""
+        }`,
+        batchId,
+        problems: endState?.problems ?? []
+      });
+      // Các vòng không vẽ lại trang (tu_dong=1): làm mới một lần để số trên lô và danh sách lô đúng.
+      router.refresh();
     }
   }
 
@@ -121,26 +164,12 @@ export function GuiTiepControls({
           </button>
         )}
       </div>
-      {running || ended ? (
+      {running ? (
         <p role="status" className="max-w-md text-right text-xs text-slate-600" data-testid={`gui-tiep-trang-thai-${batchId}`}>
-          {running
-            ? `Đang tự gửi tiếp… đã xử lý ${processedTotal} thư${
-                typeof last?.remaining === "number" ? `, còn ${last.remaining}` : ""
-              }. Giữ tab này mở; bấm “Dừng” thì dừng sau lần chạy đang dở.`
-            : `${ended ? AUTO_CONTINUE_END_WORDS[ended] : ""} Lượt này đã xử lý ${processedTotal} thư.${
-                last?.message ? ` ${last.message}` : ""
-              }`}
+          {`Đang tự gửi tiếp… đã xử lý ${processedTotal} thư${
+            typeof last?.remaining === "number" ? `, còn ${last.remaining}` : ""
+          }. Giữ tab này mở; bấm “Dừng” thì dừng sau lần chạy đang dở.`}
         </p>
-      ) : null}
-      {!running && last?.problems.length ? (
-        <details className="max-w-md rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          <summary className="cursor-pointer font-medium">{last.problems.length} người chưa nhận được thư (lần chạy cuối)</summary>
-          <ul className="mt-1 flex flex-col gap-1">
-            {last.problems.map((problem) => (
-              <li key={problem}>{problem}</li>
-            ))}
-          </ul>
-        </details>
       ) : null}
     </div>
   );

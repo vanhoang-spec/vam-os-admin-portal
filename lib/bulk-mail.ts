@@ -1607,6 +1607,14 @@ export async function createEmailBatch(input: {
 }
 
 /** Các địa chỉ đã có kết quả trong lô này, để lần chạy sau không gửi lại. */
+/** Dòng sổ thư của một lá bị nhà cung cấp trả 429 (lib/email.ts ghi "Brevo HTTP 429: …" / "Resend HTTP 429: …"). */
+function isRateLimitedRow(row: { status?: string | null; error?: string | null }): boolean {
+  return row.status === "failed" && /\bHTTP 429\b/.test(String(row.error ?? ""));
+}
+
+/** Bao nhiêu lá lỗi nhà cung cấp LIÊN TIẾP (không phải 429) thì dừng lần chạy: nhà cung cấp đang hỏng. */
+const PROVIDER_FAILURE_STREAK_STOP = 5;
+
 async function alreadyHandled(batchId: string): Promise<{ emails: string[]; error: string | null }> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return { emails: [], error: VI_ERROR };
@@ -1615,7 +1623,7 @@ async function alreadyHandled(batchId: string): Promise<{ emails: string[]; erro
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await client
       .from("outbound_emails")
-      .select("to_email")
+      .select("to_email, status, error")
       .eq("batch_id", batchId)
       .range(from, from + PAGE - 1);
 
@@ -1623,8 +1631,13 @@ async function alreadyHandled(batchId: string): Promise<{ emails: string[]; erro
       log("alreadyHandled", error);
       return { emails: [], error: VI_ERROR };
     }
-    const rows = (data ?? []) as Array<{ to_email: string }>;
-    for (const row of rows) emails.push(String(row.to_email ?? ""));
+    const rows = (data ?? []) as Array<{ to_email: string; status?: string | null; error?: string | null }>;
+    for (const row of rows) {
+      // Lá bị nhà cung cấp từ chối vì 429 CHƯA đi: lần sau phải gửi lại người này. Mọi dòng khác
+      // (đã gửi, bị chặn, lỗi khác) là đã xử lý — gửi lại lỗi vĩnh viễn (422…) chỉ lặp lỗi mãi.
+      if (isRateLimitedRow(row)) continue;
+      emails.push(String(row.to_email ?? ""));
+    }
     if (rows.length < PAGE) break;
   }
   return { emails, error: null };
@@ -1641,9 +1654,17 @@ export type BulkRunResult = {
   error: string | null;
   /**
    * Nhà cung cấp trả 429 (chạm giới hạn tốc độ / hạn mức) nên lần chạy DỪNG ngay, không đốt phần
-   * còn lại của danh sách từng lá một. Nút "Gửi tiếp tới hết" dừng theo cờ này.
+   * còn lại của danh sách từng lá một. Lá bị 429 không tính là đã xử lý: nó còn trong `remaining`
+   * và lần sau được gửi lại. Nút "Gửi tiếp tới hết" dừng theo cờ này.
    */
   rateLimited?: boolean;
+  /**
+   * Số lá trong `failed` vì thiếu dữ liệu điền ô: KHÔNG ghi sổ, nên lần chạy sau gặp lại đúng người
+   * đó. Không được tính là "tiến được" — nếu không, vòng tự gửi chạy rỗng mãi trên cùng nhóm lỗi.
+   */
+  fillFailed?: number;
+  /** Dừng vì nhiều lá lỗi nhà cung cấp liên tiếp (không phải 429): đừng đốt cả lô thành "lỗi". */
+  providerTrouble?: boolean;
 };
 
 /**
@@ -1783,6 +1804,9 @@ export async function runEmailBatch(input: {
   let failed = 0;
   let skipped = 0;
   let rateLimited = false;
+  let fillFailed = 0;
+  let providerStreak = 0;
+  let providerTrouble = false;
   const problems: string[] = [];
 
   // Lọc lại HTML đã lưu MỘT lần cho cả lượt chạy, trước khi điền ô: cột trong database là thứ một
@@ -1813,6 +1837,7 @@ export async function runEmailBatch(input: {
       // vào sổ cho nó — nên lần chạy sau sẽ gặp lại đúng người này. Đó là chủ
       // ý: sửa dữ liệu của họ rồi chạy tiếp là xong, không phải làm lô mới.
       failed += 1;
+      fillFailed += 1;
       if (problems.length < 10) problems.push(`${recipient.fullName || recipient.email}: ${filled.message}`);
       continue;
     }
@@ -1829,14 +1854,22 @@ export async function runEmailBatch(input: {
       ...(dinhKem.attachments.length ? { attachments: dinhKem.attachments } : {})
     });
 
+    // 429: lá này CHƯA đi và mọi lá sau cũng sẽ bị từ chối. Dừng ở đây; không đếm lá này là lỗi —
+    // alreadyHandled bỏ qua dòng sổ 429, nên lần sau người này được gửi lại.
+    if (!result.ok && !result.skipped && result.providerStatus === 429) {
+      rateLimited = true;
+      break;
+    }
     if (result.skipped) skipped += 1;
-    else if (result.ok) sent += 1;
-    else {
+    else if (result.ok) {
+      sent += 1;
+      providerStreak = 0;
+    } else {
       failed += 1;
+      providerStreak += 1;
       if (problems.length < 10) problems.push(`${recipient.fullName || recipient.email}: ${result.reason ?? "lỗi gửi"}`);
-      // 429: mọi lá sau cũng sẽ bị từ chối. Dừng ở đây, phần còn lại vẫn nằm trong lô cho lần sau.
-      if (result.providerStatus === 429) {
-        rateLimited = true;
+      if (providerStreak >= PROVIDER_FAILURE_STREAK_STOP) {
+        providerTrouble = true;
         break;
       }
     }
@@ -1862,7 +1895,18 @@ export async function runEmailBatch(input: {
     log("runEmailBatch:update", updateError);
   }
 
-  return { ok: true, sent, failed, skipped, remaining, problems, error: null, ...(rateLimited ? { rateLimited } : {}) };
+  return {
+    ok: true,
+    sent,
+    failed,
+    skipped,
+    remaining,
+    problems,
+    error: null,
+    ...(rateLimited ? { rateLimited } : {}),
+    ...(fillFailed ? { fillFailed } : {}),
+    ...(providerTrouble ? { providerTrouble } : {})
+  };
 }
 
 export type AudienceCount = { sendable: number; unreachable: number };

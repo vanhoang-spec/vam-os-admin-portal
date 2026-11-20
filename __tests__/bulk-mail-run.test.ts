@@ -23,7 +23,7 @@ const BATCH = "00000000-0000-4000-8000-0000000000bb";
 type Tables = {
   memberships: Array<{ person_id: string; role: string }>;
   people: Array<{ id: string; full_name: string | null; email_primary: string | null }>;
-  handled: Array<{ to_email: string }>;
+  handled: Array<{ to_email: string; status?: string; error?: string | null }>;
 };
 
 const updates: Array<Record<string, unknown>> = [];
@@ -267,21 +267,59 @@ describe("cập nhật lô", () => {
   });
 });
 
-describe("lô to chạy liền mạch (100 thư / lần, 20/11/2026)", () => {
-  it("chỉ tiêu một lần chạy là 100, ngân sách 35 giây = 60 − 20 (một lời gọi treo) − 5", () => {
-    expect(BULK_SEND_CHUNK).toBe(100);
-    expect(BULK_TIME_BUDGET_MS).toBe(35_000);
+describe("lô to chạy liền mạch (85 thư / lần, 20/11/2026)", () => {
+  it("chỉ tiêu một lần chạy là 85, ngân sách 30 giây = 60 − 20 (một lời gọi treo) − 10", () => {
+    expect(BULK_SEND_CHUNK).toBe(85);
+    expect(BULK_TIME_BUDGET_MS).toBe(30_000);
   });
 
-  it("nhà cung cấp trả 429: dừng ngay sau lá đó, báo rateLimited, phần còn lại để lần sau", async () => {
+  it("nhà cung cấp trả 429: dừng ngay, lá bị 429 KHÔNG tính là lỗi và vẫn còn trong số còn lại", async () => {
     vi.mocked(sendTemplatedEmail)
       .mockResolvedValueOnce({ ok: true, skipped: false } as never)
       .mockResolvedValueOnce({ ok: false, skipped: false, reason: "quá giới hạn", providerStatus: 429 } as never);
     const result = await run(population(10));
-    expect(result).toMatchObject({ ok: true, sent: 1, failed: 1, remaining: 8, rateLimited: true, error: null });
+    expect(result).toMatchObject({ ok: true, sent: 1, failed: 0, remaining: 9, rateLimited: true, error: null });
     expect(sendTemplatedEmail).toHaveBeenCalledTimes(2);
     // Lô chưa xong thì vẫn running.
-    expect(updates.at(-1)).toMatchObject({ status: "running", sent_count: 1, failed_count: 1 });
+    expect(updates.at(-1)).toMatchObject({ status: "running", sent_count: 1, failed_count: 0 });
+  });
+
+  it("lần sau gửi lại người bị 429: dòng sổ 429 không tính là đã xử lý, dòng lỗi khác vẫn tính", async () => {
+    const tables = population(4);
+    tables.handled = [
+      { to_email: "nguoi0@example.com", status: "sent", error: null },
+      { to_email: "nguoi1@example.com", status: "failed", error: "Resend HTTP 429: rate_limit_exceeded" },
+      { to_email: "nguoi2@example.com", status: "failed", error: "Resend HTTP 422: validation_error" }
+    ];
+    const result = await run(tables);
+    const addressed = vi.mocked(sendTemplatedEmail).mock.calls.map((call) => call[0].toEmail).sort();
+    expect(addressed).toEqual(["nguoi1@example.com", "nguoi3@example.com"]);
+    expect(result).toMatchObject({ sent: 2, remaining: 0 });
+  });
+
+  it("5 lá lỗi nhà cung cấp liên tiếp: dừng (providerTrouble), không đốt cả lô thành lỗi", async () => {
+    vi.mocked(sendTemplatedEmail).mockResolvedValue({ ok: false, skipped: false, reason: "lỗi", providerStatus: 500 } as never);
+    const result = await run(population(30));
+    expect(result).toMatchObject({ sent: 0, failed: 5, remaining: 25, providerTrouble: true });
+    expect(sendTemplatedEmail).toHaveBeenCalledTimes(5);
+  });
+
+  it("lỗi lẻ tẻ xen thư thành công không bị coi là nhà cung cấp hỏng", async () => {
+    for (let i = 0; i < 12; i += 1) {
+      vi.mocked(sendTemplatedEmail).mockResolvedValueOnce(
+        (i % 3 === 2 ? { ok: true, skipped: false } : { ok: false, skipped: false, reason: "lỗi", providerStatus: 500 }) as never
+      );
+    }
+    const result = await run(population(12));
+    expect(result.providerTrouble).toBeUndefined();
+    expect(result).toMatchObject({ sent: 4, failed: 8, remaining: 0 });
+  });
+
+  it("lá lỗi điền ô được đếm riêng (fillFailed) — không ghi sổ, lần sau gặp lại", async () => {
+    // Ô không có trong danh mục của loại thư → renderTemplate chặn cả 3 lá, không lá nào ghi sổ.
+    const result = await run(population(3), { body: "Chào {{ten_nguoi_nhan}}, {{o_khong_co}}." });
+    expect(result).toMatchObject({ sent: 0, failed: 3, fillFailed: 3 });
+    expect(sendTemplatedEmail).not.toHaveBeenCalled();
   });
 
   it("lỗi khác 429 không dừng lần chạy", async () => {

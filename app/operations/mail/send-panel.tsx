@@ -173,6 +173,9 @@ export function SendPanel({
     continueBulkSendAction,
     initialBulkMailActionState
   );
+  // Câu báo khi một lượt "Gửi tiếp tới hết" dừng. Giữ ở đây vì lô gửi xong thì rời danh sách
+  // "đang gửi dở", và nút của nó (cùng câu báo bên trong) rời màn hình theo.
+  const [autoEndState, setAutoEndState] = useState<BulkMailActionState>(initialBulkMailActionState);
 
   // Ý định của người dùng nếu nó còn hợp lệ, nếu không thì mẫu đầu tiên còn
   // lại. Đây là chỗ duy nhất quyết định "mẫu nào", và cả ô chọn lẫn form đều
@@ -492,13 +495,16 @@ export function SendPanel({
                     {batch.skippedCount ? ` · bỏ qua ${batch.skippedCount}` : ""}
                   </span>
                 </span>
-                <GuiTiepControls batchId={batch.id} continueAction={continueAction} />
+                <GuiTiepControls batchId={batch.id} continueAction={continueAction} onEnd={setAutoEndState} />
               </li>
             ))}
           </ul>
           <Result state={continueState} />
         </div>
       ) : null}
+      <div data-testid="gui-tiep-ket-qua">
+        <Result state={autoEndState} />
+      </div>
 
       {batches.length ? (
         <div className="border-t border-vam-line pt-4">

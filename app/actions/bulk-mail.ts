@@ -57,12 +57,26 @@ function fail(message: string): BulkMailActionState {
   return { ok: false, message, batchId: null, problems: [] };
 }
 
-/** Tiến độ của một lần chạy, để nút "Gửi tiếp tới hết" biết còn đi tiếp hay phải dừng. */
-function runProgress(run: { sent: number; failed: number; skipped: number; remaining: number; rateLimited?: boolean }) {
+/**
+ * Tiến độ của một lần chạy, để nút "Gửi tiếp tới hết" biết còn đi tiếp hay phải dừng.
+ *
+ * `processed` chỉ đếm lá ĐÃ GHI SỔ (gửi, bị chặn, lỗi nhà cung cấp). Lá lỗi điền ô không ghi sổ và
+ * sẽ quay lại ở lần sau — đếm nó là "tiến được" thì vòng tự gửi chạy rỗng trên cùng nhóm lỗi.
+ */
+function runProgress(run: {
+  sent: number;
+  failed: number;
+  skipped: number;
+  remaining: number;
+  rateLimited?: boolean;
+  fillFailed?: number;
+  providerTrouble?: boolean;
+}) {
   return {
     remaining: run.remaining,
-    processed: run.sent + run.failed + run.skipped,
-    ...(run.rateLimited ? { rateLimited: true } : {})
+    processed: Math.max(0, run.sent + run.skipped + run.failed - (run.fillFailed ?? 0)),
+    ...(run.rateLimited ? { rateLimited: true } : {}),
+    ...(run.providerTrouble ? { providerTrouble: true } : {})
   };
 }
 
@@ -442,7 +456,10 @@ export async function continueBulkSendAction(
       startedAt
     });
 
-    refresh();
+    // Vòng "Gửi tiếp tới hết" (tu_dong=1) không vẽ lại trang sau mỗi lần chạy: phần vẽ lại (đếm
+    // người nhận của mọi nhóm) chạy trong CÙNG request, ăn vào `maxDuration` của lần gửi. Vòng đó tự
+    // làm mới trang một lần khi dừng. Bấm tay thì vẽ lại như cũ.
+    if (String(formData.get("tu_dong") ?? "") !== "1") refresh();
     if (run.error) return { ok: false, message: run.error, batchId, problems: run.problems };
 
     return { ok: true, message: describeRunResult(run), batchId, problems: run.problems, ...runProgress(run) };

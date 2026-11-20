@@ -4,14 +4,17 @@
  *
  * Mỗi ca canh một cách vòng tự bấm gây hại mà không ai thấy:
  *   - chạy chồng hai lần trên cùng một lô (bấm đúp, hoặc bấm "Gửi tiếp" thường trong lúc tự chạy);
- *   - đi tiếp sau lỗi / sau 429 / khi không tiến được (gọi máy chủ mãi mãi);
- *   - không dừng khi người bấm bảo dừng.
+ *   - đi tiếp sau lỗi / sau 429 / khi nhà cung cấp hỏng / khi không tiến được (gọi máy chủ mãi mãi);
+ *   - không dừng khi người bấm bảo dừng, hoặc khi rời trang (vòng chạy ngầm, mất nút Dừng);
+ *   - mất câu báo cuối khi lô xong và nút rời màn hình.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 
+const refresh = vi.fn();
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/app/actions/bulk-mail", () => ({ continueBulkSendAction: vi.fn() }));
 vi.mock("react-dom", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -20,6 +23,7 @@ vi.mock("react-dom", async (importOriginal) => {
 
 import { continueBulkSendAction } from "@/app/actions/bulk-mail";
 import { GuiTiepControls } from "@/app/operations/mail/gui-tiep-toi-het";
+import type { BulkMailActionState } from "@/lib/bulk-mail-action-types";
 
 const BATCH = "00000000-0000-4000-8000-0000000000bb";
 const ok = (remaining: number, processed: number, extra: Record<string, unknown> = {}) => ({
@@ -27,71 +31,91 @@ const ok = (remaining: number, processed: number, extra: Record<string, unknown>
 });
 
 afterEach(cleanup);
-beforeEach(() => vi.mocked(continueBulkSendAction).mockReset());
+beforeEach(() => {
+  vi.mocked(continueBulkSendAction).mockReset();
+  refresh.mockReset();
+});
 
+let onEnd: ReturnType<typeof vi.fn<(state: BulkMailActionState) => void>>;
 function mount() {
-  render(<GuiTiepControls batchId={BATCH} continueAction={vi.fn()} />);
+  onEnd = vi.fn<(state: BulkMailActionState) => void>();
+  return render(<GuiTiepControls batchId={BATCH} continueAction={vi.fn()} onEnd={onEnd} />);
 }
-const status = () => screen.getByTestId(`gui-tiep-trang-thai-${BATCH}`).textContent ?? "";
 const calls = () => vi.mocked(continueBulkSendAction).mock.calls;
+const endMessage = () => String(onEnd.mock.calls.at(-1)?.[0].message ?? "");
+const clickAuto = () => act(() => screen.getByText("Gửi tiếp tới hết").click());
 
 describe("Gửi tiếp tới hết", () => {
-  it("bấm lại cho tới khi lô xong, mỗi lần đúng lô này; cộng dồn số thư đã xử lý", async () => {
+  it("bấm lại tới khi lô xong, mỗi lần đúng lô này, tu_dong=1; báo cuối qua onEnd; làm mới trang một lần", async () => {
     vi.mocked(continueBulkSendAction)
-      .mockResolvedValueOnce(ok(309, 100) as never)
-      .mockResolvedValueOnce(ok(209, 100) as never)
-      .mockResolvedValueOnce(ok(0, 209) as never);
+      .mockResolvedValueOnce(ok(339, 85) as never)
+      .mockResolvedValueOnce(ok(254, 85) as never)
+      .mockResolvedValueOnce(ok(0, 254) as never);
     mount();
-    fireEvent.click(screen.getByText("Gửi tiếp tới hết"));
-    await waitFor(() => expect(status()).toContain("Lô đã gửi xong."));
+    clickAuto();
+    await waitFor(() => expect(onEnd).toHaveBeenCalledTimes(1));
     expect(calls()).toHaveLength(3);
-    for (const call of calls()) expect((call[1] as FormData).get("batch_id")).toBe(BATCH);
-    expect(status()).toContain("409 thư");
-    // Xong thì nút tự gửi hiện lại, nút Gửi tiếp thường mở lại.
-    expect(screen.getByText("Gửi tiếp tới hết")).toBeTruthy();
+    for (const call of calls()) {
+      expect((call[1] as FormData).get("batch_id")).toBe(BATCH);
+      expect((call[1] as FormData).get("tu_dong")).toBe("1");
+    }
+    expect(onEnd.mock.calls[0][0].ok).toBe(true);
+    expect(endMessage()).toContain("Lô đã gửi xong.");
+    expect(endMessage()).toContain("424 thư");
+    expect(refresh).toHaveBeenCalledTimes(1);
     expect((screen.getByText("Gửi tiếp") as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("lỗi: dừng ngay, không bấm thêm, hiện câu lỗi của máy chủ", async () => {
+  it("lỗi: dừng ngay, không bấm thêm, câu lỗi của máy chủ đi kèm", async () => {
     vi.mocked(continueBulkSendAction).mockResolvedValueOnce({
       ok: false, message: "Lô này đã kết thúc.", batchId: BATCH, problems: []
     } as never);
     mount();
-    fireEvent.click(screen.getByText("Gửi tiếp tới hết"));
-    await waitFor(() => expect(status()).toContain("báo lỗi"));
-    expect(status()).toContain("Lô này đã kết thúc.");
+    clickAuto();
+    await waitFor(() => expect(onEnd).toHaveBeenCalled());
+    expect(endMessage()).toContain("báo lỗi");
+    expect(endMessage()).toContain("Lô này đã kết thúc.");
+    expect(onEnd.mock.calls[0][0].ok).toBe(false);
     expect(calls()).toHaveLength(1);
   });
 
-  it("429: dừng, không bấm thêm", async () => {
-    vi.mocked(continueBulkSendAction).mockResolvedValueOnce(ok(300, 5, { rateLimited: true }) as never);
+  it.each([
+    ["429", { rateLimited: true }, "chạm giới hạn"],
+    ["nhà cung cấp lỗi liên tiếp", { providerTrouble: true }, "lỗi liên tiếp"]
+  ])("%s: dừng, không bấm thêm", async (_label, extra, words) => {
+    vi.mocked(continueBulkSendAction).mockResolvedValueOnce(ok(300, 5, extra) as never);
     mount();
-    fireEvent.click(screen.getByText("Gửi tiếp tới hết"));
-    await waitFor(() => expect(status()).toContain("chạm giới hạn"));
+    clickAuto();
+    await waitFor(() => expect(onEnd).toHaveBeenCalled());
+    expect(endMessage()).toContain(words);
     expect(calls()).toHaveLength(1);
   });
 
-  it("lần chạy không tiến được (0 thư): dừng thay vì gọi máy chủ mãi", async () => {
+  it("lần chạy không tiến được (0 thư ghi sổ): dừng thay vì gọi máy chủ mãi", async () => {
     vi.mocked(continueBulkSendAction).mockResolvedValue(ok(50, 0) as never);
     mount();
-    fireEvent.click(screen.getByText("Gửi tiếp tới hết"));
-    await waitFor(() => expect(status()).toContain("không gửi thêm được"));
+    clickAuto();
+    await waitFor(() => expect(onEnd).toHaveBeenCalled());
+    expect(endMessage()).toContain("không gửi thêm được");
     expect(calls()).toHaveLength(1);
   });
 
   it("mất kết nối giữa chừng: dừng và nói phần còn lại vẫn trong lô", async () => {
     vi.mocked(continueBulkSendAction).mockRejectedValueOnce(new Error("network"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     mount();
-    fireEvent.click(screen.getByText("Gửi tiếp tới hết"));
-    await waitFor(() => expect(status()).toContain("vẫn nằm trong lô"));
+    clickAuto();
+    await waitFor(() => expect(onEnd).toHaveBeenCalled());
+    expect(endMessage()).toContain("vẫn nằm trong lô");
     expect(calls()).toHaveLength(1);
   });
 
-  it("đang tự chạy: nút Gửi tiếp thường bị khoá, bấm đúp không mở vòng thứ hai; Dừng thì dừng sau lần đang dở", async () => {
+  it("đang tự chạy: Gửi tiếp thường bị khoá, bấm đúp không mở vòng thứ hai, có cảnh báo đóng tab; Dừng thì dừng sau lần đang dở", async () => {
     let release: (value: unknown) => void = () => undefined;
     vi.mocked(continueBulkSendAction)
       .mockImplementationOnce(() => new Promise((resolve) => (release = resolve)) as never)
-      .mockResolvedValue(ok(100, 100) as never);
+      .mockResolvedValue(ok(100, 85) as never);
+    const addListener = vi.spyOn(window, "addEventListener");
     mount();
     const auto = screen.getByText("Gửi tiếp tới hết");
     // Hai cú bấm trong CÙNG một lượt vẽ (React chưa kịp đổi nút thành "Dừng") — đúng kiểu bấm đúp nhanh.
@@ -101,11 +125,28 @@ describe("Gửi tiếp tới hết", () => {
     });
     await waitFor(() => expect(screen.getByText("Dừng")).toBeTruthy());
     expect((screen.getByText("Gửi tiếp") as HTMLButtonElement).disabled).toBe(true);
-    expect(status()).toContain("Giữ tab này mở");
+    expect(screen.getByTestId(`gui-tiep-trang-thai-${BATCH}`).textContent).toContain("Giữ tab này mở");
+    expect(addListener.mock.calls.some(([type]) => type === "beforeunload")).toBe(true);
 
-    fireEvent.click(screen.getByText("Dừng"));
-    await act(async () => release(ok(200, 100)));
-    await waitFor(() => expect(status()).toContain("Đã dừng theo yêu cầu"));
+    act(() => screen.getByText("Dừng").click());
+    await act(async () => release(ok(200, 85)));
+    await waitFor(() => expect(onEnd).toHaveBeenCalled());
+    expect(endMessage()).toContain("Đã dừng theo yêu cầu");
+    expect(calls()).toHaveLength(1);
+    addListener.mockRestore();
+  });
+
+  it("rời màn hình giữa chừng (đổi trang trong app): vòng dừng sau lần đang dở, không chạy ngầm", async () => {
+    let release: (value: unknown) => void = () => undefined;
+    vi.mocked(continueBulkSendAction)
+      .mockImplementationOnce(() => new Promise((resolve) => (release = resolve)) as never)
+      .mockResolvedValue(ok(100, 85) as never);
+    const view = mount();
+    clickAuto();
+    await waitFor(() => expect(calls()).toHaveLength(1));
+    view.unmount();
+    await act(async () => release(ok(200, 85)));
+    await waitFor(() => expect(onEnd).toHaveBeenCalled());
     expect(calls()).toHaveLength(1);
   });
 });

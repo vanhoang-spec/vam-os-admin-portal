@@ -274,9 +274,9 @@ describe("giới hạn một lần chạy", () => {
     expect(BULK_SEND_CHUNK * 350).toBeLessThanOrEqual(BULK_TIME_BUDGET_MS);
   });
 
-  it("ngân sách + một lời gọi treo tối đa (20 giây) + 5 giây ghi sổ vẫn dưới trần 60 giây", () => {
+  it("ngân sách + một lời gọi treo tối đa (20 giây) + 10 giây ghi sổ và vẽ lại trang vẫn dưới trần 60 giây", () => {
     // Hết ngân sách thì không BẮT ĐẦU lá mới, nhưng lá đang đi có thể treo tới TRANSPORT_TIMEOUT_MS.
-    expect(BULK_TIME_BUDGET_MS + 20_000 + 5_000).toBeLessThanOrEqual(60_000);
+    expect(BULK_TIME_BUDGET_MS + 20_000 + 10_000).toBeLessThanOrEqual(60_000);
   });
 });
 
@@ -291,6 +291,7 @@ describe("Gửi tiếp tới hết: khi nào bấm tiếp", () => {
     expect(autoContinueStep({ ...base, remaining: 0 })).toBe("done");
     expect(autoContinueStep({ ...base, ok: false })).toBe("error");
     expect(autoContinueStep({ ...base, rateLimited: true })).toBe("rate_limited");
+    expect(autoContinueStep({ ...base, providerTrouble: true })).toBe("provider_trouble");
     expect(autoContinueStep({ ...base, processed: 0 })).toBe("stuck");
     expect(autoContinueStep({ ...base, processed: undefined })).toBe("stuck");
     expect(autoContinueStep({ ...base, stopRequested: true })).toBe("stopped");

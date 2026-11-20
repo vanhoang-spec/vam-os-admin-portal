@@ -18,6 +18,8 @@ export type BulkMailActionState = {
   processed?: number;
   /** Lần chạy dừng vì nhà cung cấp báo chạm giới hạn (429): không tự gửi tiếp. */
   rateLimited?: boolean;
+  /** Lần chạy dừng vì nhiều lá lỗi nhà cung cấp liên tiếp: không tự gửi tiếp. */
+  providerTrouble?: boolean;
 };
 
 export const initialBulkMailActionState: BulkMailActionState = {
