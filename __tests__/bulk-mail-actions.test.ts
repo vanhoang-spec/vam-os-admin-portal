@@ -4,6 +4,7 @@
  * Ba hàng rào được khoá ở đây. Bỏ bất kỳ cái nào là mail đã nằm trong hộp thư
  * của người thật, và không có đường thu hồi.
  */
+import { revalidatePath } from "next/cache";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
@@ -284,6 +285,41 @@ describe("gửi tiếp một lô dở", () => {
     expect(result.ok).toBe(false);
     expect(result.message).toContain("duyệt lại");
     expect(runEmailBatch).not.toHaveBeenCalled();
+  });
+
+  it("trả về tiến độ cho nút Gửi tiếp tới hết, và tính giờ từ lúc lệnh bắt đầu", async () => {
+    const before = Date.now();
+    const result = await continueBulkSendAction(initialBulkMailActionState, form({ batch_id: BATCH }));
+    expect(result).toMatchObject({ ok: true, remaining: 5, processed: 25 });
+    expect(result.rateLimited).toBeUndefined();
+    const startedAt = vi.mocked(runEmailBatch).mock.calls[0][0].startedAt ?? 0;
+    expect(startedAt).toBeGreaterThanOrEqual(before);
+    expect(startedAt).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("vòng tự gửi (tu_dong=1) không vẽ lại trang sau mỗi lần chạy; bấm tay thì vẽ lại", async () => {
+    vi.mocked(revalidatePath).mockClear();
+    await continueBulkSendAction(initialBulkMailActionState, form({ batch_id: BATCH, tu_dong: "1" }));
+    expect(revalidatePath).not.toHaveBeenCalled();
+    await continueBulkSendAction(initialBulkMailActionState, form({ batch_id: BATCH }));
+    expect(revalidatePath).toHaveBeenCalledWith("/operations/mail");
+  });
+
+  it("lá lỗi điền ô (không ghi sổ) không tính là đã xử lý", async () => {
+    vi.mocked(runEmailBatch).mockResolvedValueOnce({
+      ok: true, sent: 2, failed: 5, skipped: 1, remaining: 40, problems: [], error: null, fillFailed: 4
+    } as never);
+    const result = await continueBulkSendAction(initialBulkMailActionState, form({ batch_id: BATCH }));
+    expect(result).toMatchObject({ processed: 4, remaining: 40 });
+  });
+
+  it("lần chạy bị 429: báo rateLimited để vòng tự gửi tiếp dừng", async () => {
+    vi.mocked(runEmailBatch).mockResolvedValueOnce({
+      ok: true, sent: 3, failed: 1, skipped: 0, remaining: 40, problems: [], error: null, rateLimited: true
+    } as never);
+    const result = await continueBulkSendAction(initialBulkMailActionState, form({ batch_id: BATCH }));
+    expect(result).toMatchObject({ ok: true, remaining: 40, processed: 4, rateLimited: true });
+    expect(result.message).toContain("giới hạn");
   });
 
   it("chạy tiếp với đúng lô đọc lại từ database", async () => {

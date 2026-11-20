@@ -23,7 +23,7 @@ const BATCH = "00000000-0000-4000-8000-0000000000bb";
 type Tables = {
   memberships: Array<{ person_id: string; role: string }>;
   people: Array<{ id: string; full_name: string | null; email_primary: string | null }>;
-  handled: Array<{ to_email: string }>;
+  handled: Array<{ to_email: string; status?: string; error?: string | null }>;
 };
 
 const updates: Array<Record<string, unknown>> = [];
@@ -223,17 +223,36 @@ describe("một bức thư hỏng không dừng cả lô", () => {
     expect(result.problems[0]).toContain("địa chỉ bị chặn");
   });
 
-  it("đếm riêng thư bị cấu hình chặn, không gọi đó là lỗi", async () => {
+  it("đếm riêng thư bị cấu hình chặn, không gọi đó là lỗi — và DỪNG ở lá bị chặn đầu tiên", async () => {
+    // Cổng đóng là trạng thái chung: đi tiếp chỉ đốt cả lô thành "bị chặn" (rà 20/11/2026).
     vi.mocked(sendTemplatedEmail).mockResolvedValue({
       ok: true,
       skipped: true,
       reason: "Chưa bật gửi thư"
     } as never);
 
-    const result = await run(population(2));
-    expect(result.skipped).toBe(2);
-    expect(result.failed).toBe(0);
-    expect(result.sent).toBe(0);
+    const result = await run(population(3));
+    // Lá bị chặn CHƯA đi: vẫn còn trong số còn lại, lô không xong.
+    expect(result).toMatchObject({ skipped: 1, failed: 0, sent: 0, remaining: 3, configBlocked: true });
+    expect(sendTemplatedEmail).toHaveBeenCalledTimes(1);
+    // Không cộng vào số "bỏ qua" của lô: người này quay lại lần sau, cộng mãi là phồng.
+    expect(updates.at(-1)).toMatchObject({ status: "running", skipped_count: 0 });
+  });
+
+  it("cổng mở lại: người từng bị cấu hình chặn được gửi lại (dòng sổ 'skipped' không tính là đã xử lý)", async () => {
+    const tables = population(2);
+    tables.handled = [{ to_email: "nguoi0@example.com", status: "skipped", error: "Chưa bật gửi thư" }];
+    const result = await run(tables);
+    const addressed = vi.mocked(sendTemplatedEmail).mock.calls.map((call) => call[0].toEmail).sort();
+    expect(addressed).toEqual(["nguoi0@example.com", "nguoi1@example.com"]);
+    expect(result).toMatchObject({ sent: 2, remaining: 0 });
+  });
+
+  it("lô chỉ còn 1 người mà bị cấu hình chặn: KHÔNG đánh dấu xong", async () => {
+    vi.mocked(sendTemplatedEmail).mockResolvedValue({ ok: true, skipped: true, reason: "Chưa bật gửi thư" } as never);
+    const result = await run(population(1));
+    expect(result).toMatchObject({ remaining: 1, configBlocked: true });
+    expect(updates.at(-1)).toMatchObject({ status: "running" });
   });
 
   it("không gửi bức thư còn thiếu dữ liệu, và không ghi sổ cho nó", async () => {
@@ -264,5 +283,93 @@ describe("cập nhật lô", () => {
   it("để lô ở trạng thái đang chạy khi còn người chưa nhận", async () => {
     await run(population(BULK_SEND_CHUNK + 1));
     expect(updates.at(-1)).toMatchObject({ status: "running", completed_at: null });
+  });
+});
+
+describe("lô to chạy liền mạch (85 thư / lần, 20/11/2026)", () => {
+  it("chỉ tiêu một lần chạy là 85, ngân sách 30 giây = 60 − 20 (một lời gọi treo) − 10", () => {
+    expect(BULK_SEND_CHUNK).toBe(85);
+    expect(BULK_TIME_BUDGET_MS).toBe(30_000);
+  });
+
+  it("nhà cung cấp trả 429: dừng ngay, lá bị 429 KHÔNG tính là lỗi và vẫn còn trong số còn lại", async () => {
+    vi.mocked(sendTemplatedEmail)
+      .mockResolvedValueOnce({ ok: true, skipped: false } as never)
+      .mockResolvedValueOnce({ ok: false, skipped: false, reason: "quá giới hạn", providerStatus: 429 } as never);
+    const result = await run(population(10));
+    expect(result).toMatchObject({ ok: true, sent: 1, failed: 0, remaining: 9, rateLimited: true, error: null });
+    expect(sendTemplatedEmail).toHaveBeenCalledTimes(2);
+    // Lô chưa xong thì vẫn running.
+    expect(updates.at(-1)).toMatchObject({ status: "running", sent_count: 1, failed_count: 0 });
+  });
+
+  it("lần sau gửi lại người bị 429: dòng sổ 429 không tính là đã xử lý, dòng lỗi khác vẫn tính", async () => {
+    const tables = population(4);
+    tables.handled = [
+      { to_email: "nguoi0@example.com", status: "sent", error: null },
+      { to_email: "nguoi1@example.com", status: "failed", error: "Resend HTTP 429: rate_limit_exceeded" },
+      { to_email: "nguoi2@example.com", status: "failed", error: "Resend HTTP 422: validation_error" }
+    ];
+    const result = await run(tables);
+    const addressed = vi.mocked(sendTemplatedEmail).mock.calls.map((call) => call[0].toEmail).sort();
+    expect(addressed).toEqual(["nguoi1@example.com", "nguoi3@example.com"]);
+    expect(result).toMatchObject({ sent: 2, remaining: 0 });
+  });
+
+  it("5 lá lỗi nhà cung cấp liên tiếp: dừng (providerTrouble), không đốt cả lô thành lỗi", async () => {
+    vi.mocked(sendTemplatedEmail).mockResolvedValue({ ok: false, skipped: false, reason: "lỗi", providerStatus: 500 } as never);
+    const result = await run(population(30));
+    expect(result).toMatchObject({ sent: 0, failed: 5, remaining: 25, providerTrouble: true });
+    expect(sendTemplatedEmail).toHaveBeenCalledTimes(5);
+  });
+
+  it("lỗi lẻ tẻ xen thư thành công không bị coi là nhà cung cấp hỏng", async () => {
+    for (let i = 0; i < 12; i += 1) {
+      vi.mocked(sendTemplatedEmail).mockResolvedValueOnce(
+        (i % 3 === 2 ? { ok: true, skipped: false } : { ok: false, skipped: false, reason: "lỗi", providerStatus: 500 }) as never
+      );
+    }
+    const result = await run(population(12));
+    expect(result.providerTrouble).toBeUndefined();
+    expect(result).toMatchObject({ sent: 4, failed: 8, remaining: 0 });
+  });
+
+  it("lá lỗi điền ô được đếm riêng (fillFailed) — không ghi sổ, lần sau gặp lại", async () => {
+    // Ô không có trong danh mục của loại thư → renderTemplate chặn cả 3 lá, không lá nào ghi sổ.
+    // Họ CHƯA nhận: vẫn còn trong số còn lại, lô không được đánh dấu xong, và không cộng vào số lỗi
+    // của lô (lần sau họ quay lại, cộng mãi là phồng).
+    const result = await run(population(3), {
+      body: "Chào {{ten_nguoi_nhan}}, {{o_khong_co}}.",
+      batch: batch({ failedCount: 2 })
+    });
+    expect(result.remaining).toBe(3);
+    expect(updates.at(-1)).toMatchObject({ status: "running", failed_count: 2 });
+    expect(result).toMatchObject({ sent: 0, failed: 3, fillFailed: 3 });
+    expect(sendTemplatedEmail).not.toHaveBeenCalled();
+  });
+
+  it("lá lỗi điền ô không chiếm trần một lần chạy: người hợp lệ phía sau vẫn tới lượt", async () => {
+    const result = await run(population(BULK_SEND_CHUNK + 15), { body: "Chào {{ten_nguoi_nhan}}, {{o_khong_co}}." });
+    expect(result.fillFailed).toBe(BULK_SEND_CHUNK + 15);
+    expect(result.remaining).toBe(BULK_SEND_CHUNK + 15);
+  });
+
+  it("lỗi khác 429 không dừng lần chạy", async () => {
+    vi.mocked(sendTemplatedEmail)
+      .mockResolvedValueOnce({ ok: false, skipped: false, reason: "hộp thư sai", providerStatus: 422 } as never);
+    const result = await run(population(4));
+    expect(result).toMatchObject({ sent: 3, failed: 1, remaining: 0 });
+    expect(result.rateLimited).toBeUndefined();
+  });
+
+  it("ngân sách tính từ mốc lệnh bắt đầu: lệnh đã tốn gần hết thời gian thì không bắt đầu lá nào", async () => {
+    const result = await run(population(5), { now: () => 100_000, startedAt: 100_000 - BULK_TIME_BUDGET_MS });
+    expect(result).toMatchObject({ ok: true, sent: 0, remaining: 5 });
+    expect(sendTemplatedEmail).not.toHaveBeenCalled();
+  });
+
+  it("mốc bắt đầu còn trong ngân sách thì gửi bình thường", async () => {
+    const result = await run(population(5), { now: () => 100_000, startedAt: 100_000 - (BULK_TIME_BUDGET_MS - 1) });
+    expect(result).toMatchObject({ sent: 5, remaining: 0 });
   });
 });

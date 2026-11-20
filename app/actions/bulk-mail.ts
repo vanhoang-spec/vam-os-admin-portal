@@ -57,6 +57,31 @@ function fail(message: string): BulkMailActionState {
   return { ok: false, message, batchId: null, problems: [] };
 }
 
+/**
+ * Tiến độ của một lần chạy, để nút "Gửi tiếp tới hết" biết còn đi tiếp hay phải dừng.
+ *
+ * `processed` chỉ đếm lá ĐÃ GHI SỔ (gửi, bị chặn, lỗi nhà cung cấp). Lá lỗi điền ô không ghi sổ và
+ * sẽ quay lại ở lần sau — đếm nó là "tiến được" thì vòng tự gửi chạy rỗng trên cùng nhóm lỗi.
+ */
+function runProgress(run: {
+  sent: number;
+  failed: number;
+  skipped: number;
+  remaining: number;
+  rateLimited?: boolean;
+  fillFailed?: number;
+  providerTrouble?: boolean;
+  configBlocked?: boolean;
+}) {
+  return {
+    remaining: run.remaining,
+    processed: Math.max(0, run.sent + run.skipped + run.failed - (run.fillFailed ?? 0)),
+    ...(run.rateLimited ? { rateLimited: true } : {}),
+    ...(run.providerTrouble ? { providerTrouble: true } : {}),
+    ...(run.configBlocked ? { configBlocked: true } : {})
+  };
+}
+
 async function authorize(): Promise<
   | { ok: true; adminUserId: string; adminEmail: string; seasonId: string; seasonCode: string }
   | { ok: false; state: BulkMailActionState }
@@ -263,6 +288,9 @@ export async function startBulkSendAction(
   _previousState: BulkMailActionState,
   formData: FormData
 ): Promise<BulkMailActionState> {
+  // Ngân sách thời gian của lần chạy tính từ ĐÂY (BULK_TIME_BUDGET_MS): phần kiểm quyền, dựng danh
+  // sách và mở lô cũng nằm trong `maxDuration` của trang.
+  const startedAt = Date.now();
   try {
     const auth = await authorize();
     if (!auth.ok) return auth.state;
@@ -343,7 +371,8 @@ export async function startBulkSendAction(
       seasonCode: auth.seasonCode,
       subject: row.subject,
       body: row.body,
-      bodyHtml: row.bodyHtml
+      bodyHtml: row.bodyHtml,
+      startedAt
     });
 
     refresh();
@@ -379,7 +408,8 @@ export async function startBulkSendAction(
       ok: true,
       message: withAttachmentNote(describeRunResult(run) + ccNote, files.files.length),
       batchId: created.batch.id,
-      problems
+      problems,
+      ...runProgress(run)
     };
   } catch (error) {
     console.error("[startBulkSendAction]", error);
@@ -392,6 +422,9 @@ export async function continueBulkSendAction(
   _previousState: BulkMailActionState,
   formData: FormData
 ): Promise<BulkMailActionState> {
+  // Ngân sách thời gian của lần chạy tính từ ĐÂY (BULK_TIME_BUDGET_MS): phần kiểm quyền, dựng danh
+  // sách và mở lô cũng nằm trong `maxDuration` của trang.
+  const startedAt = Date.now();
   try {
     const auth = await authorize();
     if (!auth.ok) return auth.state;
@@ -421,13 +454,17 @@ export async function continueBulkSendAction(
       seasonCode: auth.seasonCode,
       subject: template.row.subject,
       body: template.row.body,
-      bodyHtml: template.row.bodyHtml
+      bodyHtml: template.row.bodyHtml,
+      startedAt
     });
 
-    refresh();
+    // Vòng "Gửi tiếp tới hết" (tu_dong=1) không vẽ lại trang sau mỗi lần chạy: phần vẽ lại (đếm
+    // người nhận của mọi nhóm) chạy trong CÙNG request, ăn vào `maxDuration` của lần gửi. Vòng đó tự
+    // làm mới trang một lần khi dừng. Bấm tay thì vẽ lại như cũ.
+    if (String(formData.get("tu_dong") ?? "") !== "1") refresh();
     if (run.error) return { ok: false, message: run.error, batchId, problems: run.problems };
 
-    return { ok: true, message: describeRunResult(run), batchId, problems: run.problems };
+    return { ok: true, message: describeRunResult(run), batchId, problems: run.problems, ...runProgress(run) };
   } catch (error) {
     console.error("[continueBulkSendAction]", error);
     return fail("Lỗi hệ thống. Vui lòng thử lại.");
@@ -551,6 +588,9 @@ export async function startCustomBulkSendAction(
   _previousState: BulkMailActionState,
   formData: FormData
 ): Promise<BulkMailActionState> {
+  // Ngân sách thời gian của lần chạy tính từ ĐÂY (BULK_TIME_BUDGET_MS): phần kiểm quyền, dựng danh
+  // sách và mở lô cũng nằm trong `maxDuration` của trang.
+  const startedAt = Date.now();
   try {
     const auth = await authorize();
     if (!auth.ok) return auth.state;
@@ -624,7 +664,8 @@ export async function startCustomBulkSendAction(
       seasonCode: auth.seasonCode,
       subject: row.subject,
       body: row.body,
-      bodyHtml: row.bodyHtml
+      bodyHtml: row.bodyHtml,
+      startedAt
     });
 
     refresh();
@@ -635,7 +676,8 @@ export async function startCustomBulkSendAction(
       ok: true,
       message: withAttachmentNote(describeRunResult(run), files.files.length),
       batchId: created.batch.id,
-      problems: run.problems
+      problems: run.problems,
+      ...runProgress(run)
     };
   } catch (error) {
     console.error("[startCustomBulkSendAction]", error);

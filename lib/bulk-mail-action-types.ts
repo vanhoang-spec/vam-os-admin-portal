@@ -12,6 +12,16 @@ export type BulkMailActionState = {
   batchId: string | null;
   /** Người không nhận được thư, kèm lý do — mỗi dòng một người. */
   problems: string[];
+  /** Số người lô còn phải gửi sau lần chạy này. Chỉ có khi lô đã chạy; nút "Gửi tiếp tới hết" dừng ở 0. */
+  remaining?: number;
+  /** Số thư lần chạy này đã xử lý (gửi + lỗi + bị chặn). 0 nghĩa là không đi thêm được, nên dừng lặp. */
+  processed?: number;
+  /** Lần chạy dừng vì nhà cung cấp báo chạm giới hạn (429): không tự gửi tiếp. */
+  rateLimited?: boolean;
+  /** Lần chạy dừng vì nhiều lá lỗi nhà cung cấp liên tiếp: không tự gửi tiếp. */
+  providerTrouble?: boolean;
+  /** Lần chạy dừng vì cấu hình đang chặn gửi thư: không tự gửi tiếp. */
+  configBlocked?: boolean;
 };
 
 export const initialBulkMailActionState: BulkMailActionState = {

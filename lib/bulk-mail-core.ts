@@ -306,21 +306,31 @@ export type BulkEventOption = {
 /**
  * Số thư tối đa một lần chạy được gửi.
  *
- * Cùng con số với đợt gửi bù thư xác nhận, vì cùng một lý do: các lời gọi nhà
- * cung cấp email chạy tuần tự, và một request phải kết thúc trước khi Vercel
- * cắt. Lô còn dư thì lần chạy sau đi tiếp — trạng thái nằm trong
- * `outbound_emails`, không nằm trong bộ nhớ của tiến trình.
+ * Các lời gọi nhà cung cấp email chạy tuần tự, và một request phải kết thúc
+ * trước khi Vercel cắt. Lô còn dư thì lần chạy sau đi tiếp — trạng thái nằm
+ * trong `outbound_emails`, không nằm trong bộ nhớ của tiến trình.
+ *
+ * 85 (trước 20/11/2026 là 25): đo 6.794 thư hàng loạt qua Resend trong 45
+ * ngày, mỗi thư ~0,35 giây (p90 0,38), không lá nào lỗi — 85 thư ≈ 30 giây,
+ * vừa ngân sách BULK_TIME_BUDGET_MS bên dưới. Ngân sách mới là thứ thật sự giữ
+ * một lần chạy trong giới hạn; con số này là trần, để một lần bấm không đi quá
+ * xa khi nhà cung cấp nhanh bất thường. Lô 509 thư từng phải bấm "Gửi tiếp" 21
+ * lần; nay 6 lần, hoặc một lần "Gửi tiếp tới hết".
  */
-export const BULK_SEND_CHUNK = 25;
+export const BULK_SEND_CHUNK = 85;
 
 /**
- * Ngân sách thời gian của một lần chạy.
+ * Ngân sách thời gian của một lần chạy: hết ngân sách thì KHÔNG BẮT ĐẦU thư mới.
  *
- * Ngắn hơn `maxDuration` của route một quãng: bị cắt giữa chừng nghĩa là dòng
+ * Tính từ lúc lệnh bắt đầu (cả phần dựng danh sách, mở lô), không chỉ từ vòng
+ * gửi. 30 giây = `maxDuration` 60 giây của trang Mail − 20 giây một lời gọi nhà
+ * cung cấp có thể treo (TRANSPORT_TIMEOUT_MS) − 10 giây cho dòng ghi sổ cuối,
+ * cập nhật lô, và phần vẽ lại trang Mail (revalidatePath đếm người nhận của mọi
+ * nhóm, chạy trong CÙNG request khi bấm tay). Bị cắt giữa chừng nghĩa là dòng
  * ghi sổ của bức thư cuối không kịp viết xong, và bức thư đó biến mất khỏi mọi
  * câu trả lời cho "đã gửi cho ai".
  */
-export const BULK_TIME_BUDGET_MS = 40_000;
+export const BULK_TIME_BUDGET_MS = 30_000;
 
 /**
  * Người nhận thuộc về dòng dữ liệu nào — để sổ thư nối lá thư về đúng chỗ.
@@ -552,14 +562,89 @@ export function describeRunResult(input: {
   failed: number;
   skipped: number;
   remaining: number;
+  rateLimited?: boolean;
+  providerTrouble?: boolean;
+  configBlocked?: boolean;
+  /** Số lá lỗi điền ô của lần chạy (không ghi sổ, còn trong `remaining`). */
+  fillFailed?: number;
 }): string {
   const parts = [`Đã gửi ${input.sent} thư`];
   if (input.skipped) parts.push(`${input.skipped} thư bị cấu hình chặn`);
   if (input.failed) parts.push(`${input.failed} thư lỗi`);
 
   const head = parts.join(", ") + ".";
+  // Ba câu dừng giữa chừng chỉ có nghĩa khi lô còn người; hết người rồi thì nói "đã gửi xong" như thường.
+  if (input.configBlocked && input.remaining > 0) {
+    return `${head} Cấu hình đang chặn gửi thư nên đã dừng. Còn ${input.remaining} người chưa nhận — bật lại gửi thư rồi bấm “Gửi tiếp”.`;
+  }
+  if (input.rateLimited && input.remaining > 0) {
+    return `${head} Nhà cung cấp email báo chạm giới hạn gửi nên đã dừng. Còn ${input.remaining} người chưa nhận — chờ ít phút (nếu là hạn mức trong ngày thì chờ sang ngày) rồi bấm “Gửi tiếp”.`;
+  }
+  // Còn lại chỉ toàn người lỗi điền ô: bấm "Gửi tiếp" không giúp gì, phải sửa mẫu hoặc dữ liệu trước.
+  if (input.fillFailed && input.remaining > 0 && input.remaining <= input.fillFailed) {
+    return `${head} Còn ${input.remaining} người chưa nhận vì thiếu dữ liệu điền ô — sửa mẫu thư hoặc dữ liệu của họ rồi mới bấm “Gửi tiếp”.`;
+  }
+  if (input.providerTrouble && input.remaining > 0) {
+    return `${head} Nhiều thư lỗi liên tiếp nên đã dừng để không ghi lỗi cả lô. Còn ${input.remaining} người chưa nhận — kiểm Nhật ký gửi rồi bấm “Gửi tiếp”.`;
+  }
   if (input.remaining > 0) {
     return `${head} Còn ${input.remaining} người chưa nhận — bấm “Gửi tiếp” để đi tiếp.`;
   }
   return `${head} Lô này đã gửi xong.`;
 }
+
+/** Trần số lần chạy của một lượt "Gửi tiếp tới hết": 60 × BULK_SEND_CHUNK là hơn hạn mức cả ngày. */
+export const AUTO_CONTINUE_MAX_ROUNDS = 60;
+
+export type AutoContinueStep =
+  | "continue"
+  | "done"
+  | "stopped"
+  | "error"
+  | "rate_limited"
+  | "provider_trouble"
+  | "config_blocked"
+  | "stuck"
+  | "round_limit";
+
+/**
+ * Sau mỗi lần chạy, nút "Gửi tiếp tới hết" có bấm tiếp hay không.
+ *
+ * Chỉ đi tiếp khi lần chạy vừa rồi CHẮC CHẮN tiến được: thành công, còn người, có xử lý ít nhất một
+ * lá, không bị nhà cung cấp chặn, người bấm chưa bảo dừng. Mọi trường hợp khác dừng lại và nói vì
+ * sao — một vòng lặp tự bấm mà không tiến được là một vòng lặp gọi máy chủ mãi mãi, còn một vòng
+ * lặp đi tiếp sau lỗi là gửi thư trong khi người bấm tưởng nó đã dừng.
+ */
+export function autoContinueStep(input: {
+  ok: boolean;
+  remaining?: number;
+  processed?: number;
+  rateLimited?: boolean;
+  providerTrouble?: boolean;
+  configBlocked?: boolean;
+  stopRequested: boolean;
+  round: number;
+}): AutoContinueStep {
+  if (!input.ok) return "error";
+  if (typeof input.remaining !== "number" || !Number.isFinite(input.remaining)) return "error";
+  if (input.remaining <= 0) return "done";
+  if (input.configBlocked) return "config_blocked";
+  if (input.rateLimited) return "rate_limited";
+  if (input.providerTrouble) return "provider_trouble";
+  if (!input.processed || input.processed <= 0) return "stuck";
+  if (input.stopRequested) return "stopped";
+  if (input.round + 1 >= AUTO_CONTINUE_MAX_ROUNDS) return "round_limit";
+  return "continue";
+}
+
+/** Câu báo khi lượt "Gửi tiếp tới hết" dừng (không có câu cho "continue"). */
+export const AUTO_CONTINUE_END_WORDS: Record<Exclude<AutoContinueStep, "continue">, string> = {
+  done: "Lô đã gửi xong.",
+  stopped: "Đã dừng theo yêu cầu. Phần còn lại vẫn nằm trong lô.",
+  error: "Đã dừng vì lần chạy vừa rồi báo lỗi.",
+  rate_limited: "Đã dừng vì nhà cung cấp email báo chạm giới hạn gửi. Chờ ít phút rồi bấm lại.",
+  provider_trouble: "Đã dừng vì nhiều thư lỗi liên tiếp. Kiểm Nhật ký gửi trước khi bấm lại.",
+  config_blocked: "Đã dừng vì cấu hình đang chặn gửi thư. Bật lại gửi thư rồi bấm lại.",
+  stuck: "Đã dừng vì lần chạy vừa rồi không gửi thêm được lá nào (thường do thiếu dữ liệu điền ô của vài người).",
+  round_limit: "Đã dừng sau số lần chạy tối đa của một lượt. Bấm lại để đi tiếp."
+};

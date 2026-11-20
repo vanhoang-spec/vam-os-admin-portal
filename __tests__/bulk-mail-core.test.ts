@@ -7,11 +7,13 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  AUTO_CONTINUE_MAX_ROUNDS,
   BULK_AUDIENCES,
   BULK_AUDIENCE_LABELS,
   BULK_SEND_CHUNK,
   BULK_TIME_BUDGET_MS,
   buildRecipientValues,
+  autoContinueStep,
   confirmBulkSend,
   describeRunResult,
   isBulkAudience,
@@ -265,8 +267,58 @@ describe("giới hạn một lần chạy", () => {
     expect(BULK_TIME_BUDGET_MS).toBeLessThan(60_000);
   });
 
-  it("mỗi lần chạy gửi một số lượng vừa phải", () => {
+  it("mỗi lần chạy gửi một số lượng vừa phải: chỉ tiêu × thời gian đo được lọt ngân sách", () => {
+    // Đo 20/11/2026: ~0,35 giây / thư qua Resend (p90 0,38). Chỉ tiêu mà vượt ngân sách thì nó
+    // không còn là trần thật, và mỗi lần chạy kết thúc bằng hết giờ chứ không bằng đủ số.
     expect(BULK_SEND_CHUNK).toBeGreaterThan(0);
-    expect(BULK_SEND_CHUNK).toBeLessThanOrEqual(50);
+    expect(BULK_SEND_CHUNK * 350).toBeLessThanOrEqual(BULK_TIME_BUDGET_MS);
+  });
+
+  it("ngân sách + một lời gọi treo tối đa (20 giây) + 10 giây ghi sổ và vẽ lại trang vẫn dưới trần 60 giây", () => {
+    // Hết ngân sách thì không BẮT ĐẦU lá mới, nhưng lá đang đi có thể treo tới TRANSPORT_TIMEOUT_MS.
+    expect(BULK_TIME_BUDGET_MS + 20_000 + 10_000).toBeLessThanOrEqual(60_000);
+  });
+});
+
+describe("Gửi tiếp tới hết: khi nào bấm tiếp", () => {
+  const base = { ok: true, remaining: 300, processed: 100, stopRequested: false, round: 0 };
+
+  it("chỉ đi tiếp khi lần vừa rồi chắc chắn tiến được", () => {
+    expect(autoContinueStep(base)).toBe("continue");
+  });
+
+  it("dừng: xong, lỗi, 429, không tiến, người bấm dừng, chạm trần số lần", () => {
+    expect(autoContinueStep({ ...base, remaining: 0 })).toBe("done");
+    expect(autoContinueStep({ ...base, ok: false })).toBe("error");
+    expect(autoContinueStep({ ...base, rateLimited: true })).toBe("rate_limited");
+    expect(autoContinueStep({ ...base, providerTrouble: true })).toBe("provider_trouble");
+    expect(autoContinueStep({ ...base, processed: 0 })).toBe("stuck");
+    expect(autoContinueStep({ ...base, processed: undefined })).toBe("stuck");
+    expect(autoContinueStep({ ...base, stopRequested: true })).toBe("stopped");
+    expect(autoContinueStep({ ...base, round: AUTO_CONTINUE_MAX_ROUNDS - 1 })).toBe("round_limit");
+    // Máy chủ cũ không trả số còn lại: không đoán, dừng.
+    expect(autoContinueStep({ ...base, remaining: undefined })).toBe("error");
+  });
+
+  it("lỗi thắng mọi cờ; hết người thì xong dù có cờ dừng", () => {
+    expect(autoContinueStep({ ...base, ok: false, rateLimited: true })).toBe("error");
+    expect(autoContinueStep({ ...base, rateLimited: true, remaining: 0 })).toBe("done");
+    expect(autoContinueStep({ ...base, configBlocked: true })).toBe("config_blocked");
+    expect(autoContinueStep({ ...base, configBlocked: true, processed: 0 })).toBe("config_blocked");
+  });
+
+  it("câu báo dừng giữa chừng chỉ khi lô còn người", () => {
+    const base_ = { sent: 3, failed: 5, skipped: 0 };
+    expect(describeRunResult({ ...base_, remaining: 10, providerTrouble: true })).toContain("lỗi liên tiếp");
+    expect(describeRunResult({ ...base_, remaining: 0, providerTrouble: true })).toContain("đã gửi xong");
+    expect(describeRunResult({ sent: 0, failed: 0, skipped: 1, remaining: 9, configBlocked: true })).toContain("chặn gửi thư");
+    // Còn lại chỉ toàn người lỗi điền ô: không bảo bấm Gửi tiếp suông.
+    expect(describeRunResult({ sent: 0, failed: 4, skipped: 0, remaining: 4, fillFailed: 4 })).toContain("sửa mẫu thư");
+    expect(describeRunResult({ sent: 10, failed: 4, skipped: 0, remaining: 30, fillFailed: 4 })).toContain("Gửi tiếp");
+    expect(describeRunResult({ sent: 10, failed: 4, skipped: 0, remaining: 30, fillFailed: 4 })).not.toContain("sửa mẫu thư");
+  });
+
+  it("câu báo nói 429 rõ ràng", () => {
+    expect(describeRunResult({ sent: 3, failed: 1, skipped: 0, remaining: 40, rateLimited: true })).toContain("chạm giới hạn");
   });
 });
