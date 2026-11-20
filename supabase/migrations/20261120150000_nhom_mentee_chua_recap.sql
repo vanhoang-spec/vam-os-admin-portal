@@ -2,8 +2,10 @@
 -- Nhóm nhận thư "Mentee chưa có recap trong tháng" + CC mentor của cặp
 -- =============================================================================
 -- DÁN TRƯỚC KHI MERGE PR. Cần 20261106120000 và 20261109210000 đã chạy trước.
--- Thiếu migration này thì mở lô nhóm mới bị CHECK từ chối ngay lúc mở, chưa lá nào đi.
--- Các nhóm cũ và Danh sách tùy chỉnh chạy y như trước.
+-- Mã của PR này đọc email_batches.audience_month ở MỌI lần liệt kê và mở lô, của MỌI nhóm: merge
+-- trước khi dán thì trang Mail báo lỗi đọc lô và không mở được lô nào (PostgREST: cột không tồn tại;
+-- lệnh insert ... select hỏng trọn, không để lại lô dở). Mã cũ chạy bình thường trên schema mới
+-- (cột mới đều nullable hoặc có mặc định), nên dán trước rồi merge là an toàn.
 --
 -- VÌ SAO LÔ NHÓM NÀY CHỐT DANH SÁCH (như lô custom), KHÔNG DỰNG LẠI MỖI LẦN "GỬI TIẾP"
 --   Danh sách nhắc là ảnh chụp "tính tới đợt quét ngày 20": bài recap quét sau đó làm danh sách
