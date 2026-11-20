@@ -235,7 +235,8 @@ describe("một bức thư hỏng không dừng cả lô", () => {
     // Lá bị chặn CHƯA đi: vẫn còn trong số còn lại, lô không xong.
     expect(result).toMatchObject({ skipped: 1, failed: 0, sent: 0, remaining: 3, configBlocked: true });
     expect(sendTemplatedEmail).toHaveBeenCalledTimes(1);
-    expect(updates.at(-1)).toMatchObject({ status: "running", skipped_count: 1 });
+    // Không cộng vào số "bỏ qua" của lô: người này quay lại lần sau, cộng mãi là phồng.
+    expect(updates.at(-1)).toMatchObject({ status: "running", skipped_count: 0 });
   });
 
   it("cổng mở lại: người từng bị cấu hình chặn được gửi lại (dòng sổ 'skipped' không tính là đã xử lý)", async () => {

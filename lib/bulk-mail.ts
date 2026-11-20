@@ -1899,7 +1899,9 @@ export async function runEmailBatch(input: {
     .from("email_batches")
     .update({
       sent_count: input.batch.sentCount + sent,
-      skipped_count: input.batch.skippedCount + skipped,
+      // Lá bị cấu hình chặn quay lại ở lần sau (alreadyHandled bỏ qua dòng "skipped"): cộng vào lô
+      // là đếm cùng một người mỗi lần bấm. Số lá bị chặn của lần chạy vẫn nói trong câu báo.
+      skipped_count: input.batch.skippedCount,
       failed_count: input.batch.failedCount + ledgeredFailed,
       status: done ? "completed" : "running",
       completed_at: done ? new Date().toISOString() : null
