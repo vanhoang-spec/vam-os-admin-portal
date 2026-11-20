@@ -23,6 +23,7 @@ import {
 } from "@/app/actions/bulk-mail";
 import type { RecapMonthOption } from "@/lib/bulk-mail-recap-core";
 import { CustomListBuilder } from "./custom-list-builder";
+import { GuiTiepControls } from "./gui-tiep-toi-het";
 import { MailAttachmentPicker, MailAttachmentsField, type MailAttachment } from "./mail-attachments";
 
 export type SendableTemplate = { id: string; name: string; subject: string };
@@ -491,10 +492,7 @@ export function SendPanel({
                     {batch.skippedCount ? ` · bỏ qua ${batch.skippedCount}` : ""}
                   </span>
                 </span>
-                <form action={continueAction}>
-                  <input type="hidden" name="batch_id" value={batch.id} />
-                  <SubmitButton label="Gửi tiếp" busyLabel="Đang gửi…" tone="quiet" />
-                </form>
+                <GuiTiepControls batchId={batch.id} continueAction={continueAction} />
               </li>
             ))}
           </ul>

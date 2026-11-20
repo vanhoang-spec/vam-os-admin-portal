@@ -306,21 +306,28 @@ export type BulkEventOption = {
 /**
  * Số thư tối đa một lần chạy được gửi.
  *
- * Cùng con số với đợt gửi bù thư xác nhận, vì cùng một lý do: các lời gọi nhà
- * cung cấp email chạy tuần tự, và một request phải kết thúc trước khi Vercel
- * cắt. Lô còn dư thì lần chạy sau đi tiếp — trạng thái nằm trong
- * `outbound_emails`, không nằm trong bộ nhớ của tiến trình.
+ * Các lời gọi nhà cung cấp email chạy tuần tự, và một request phải kết thúc
+ * trước khi Vercel cắt. Lô còn dư thì lần chạy sau đi tiếp — trạng thái nằm
+ * trong `outbound_emails`, không nằm trong bộ nhớ của tiến trình.
+ *
+ * 100 (trước 20/11/2026 là 25): đo 6.794 thư hàng loạt qua Resend trong 45
+ * ngày, mỗi thư ~0,35 giây (p90 0,38), không lá nào lỗi — 100 thư ≈ 35 giây.
+ * Thứ thật sự giữ một lần chạy trong giới hạn là BULK_TIME_BUDGET_MS bên dưới;
+ * con số này chỉ là trần, để một lần bấm không đi quá xa khi nhà cung cấp nhanh
+ * bất thường. Lô 509 thư từng phải bấm "Gửi tiếp" 21 lần.
  */
-export const BULK_SEND_CHUNK = 25;
+export const BULK_SEND_CHUNK = 100;
 
 /**
- * Ngân sách thời gian của một lần chạy.
+ * Ngân sách thời gian của một lần chạy: hết ngân sách thì KHÔNG BẮT ĐẦU thư mới.
  *
- * Ngắn hơn `maxDuration` của route một quãng: bị cắt giữa chừng nghĩa là dòng
- * ghi sổ của bức thư cuối không kịp viết xong, và bức thư đó biến mất khỏi mọi
- * câu trả lời cho "đã gửi cho ai".
+ * Tính từ lúc lệnh bắt đầu (cả phần dựng danh sách, mở lô), không chỉ từ vòng
+ * gửi. 35 giây = `maxDuration` 60 giây của trang Mail − 20 giây một lời gọi nhà
+ * cung cấp có thể treo (TRANSPORT_TIMEOUT_MS) − 5 giây cho dòng ghi sổ cuối và
+ * cập nhật lô. Bị cắt giữa chừng nghĩa là dòng ghi sổ của bức thư cuối không
+ * kịp viết xong, và bức thư đó biến mất khỏi mọi câu trả lời cho "đã gửi cho ai".
  */
-export const BULK_TIME_BUDGET_MS = 40_000;
+export const BULK_TIME_BUDGET_MS = 35_000;
 
 /**
  * Người nhận thuộc về dòng dữ liệu nào — để sổ thư nối lá thư về đúng chỗ.
@@ -552,14 +559,59 @@ export function describeRunResult(input: {
   failed: number;
   skipped: number;
   remaining: number;
+  rateLimited?: boolean;
 }): string {
   const parts = [`Đã gửi ${input.sent} thư`];
   if (input.skipped) parts.push(`${input.skipped} thư bị cấu hình chặn`);
   if (input.failed) parts.push(`${input.failed} thư lỗi`);
 
   const head = parts.join(", ") + ".";
+  if (input.rateLimited) {
+    return `${head} Nhà cung cấp email báo chạm giới hạn gửi nên đã dừng. Còn ${input.remaining} người chưa nhận — chờ ít phút rồi bấm “Gửi tiếp”.`;
+  }
   if (input.remaining > 0) {
     return `${head} Còn ${input.remaining} người chưa nhận — bấm “Gửi tiếp” để đi tiếp.`;
   }
   return `${head} Lô này đã gửi xong.`;
 }
+
+/** Trần số lần chạy của một lượt "Gửi tiếp tới hết": 60 × BULK_SEND_CHUNK là hơn hạn mức cả ngày. */
+export const AUTO_CONTINUE_MAX_ROUNDS = 60;
+
+export type AutoContinueStep = "continue" | "done" | "stopped" | "error" | "rate_limited" | "stuck" | "round_limit";
+
+/**
+ * Sau mỗi lần chạy, nút "Gửi tiếp tới hết" có bấm tiếp hay không.
+ *
+ * Chỉ đi tiếp khi lần chạy vừa rồi CHẮC CHẮN tiến được: thành công, còn người, có xử lý ít nhất một
+ * lá, không bị nhà cung cấp chặn, người bấm chưa bảo dừng. Mọi trường hợp khác dừng lại và nói vì
+ * sao — một vòng lặp tự bấm mà không tiến được là một vòng lặp gọi máy chủ mãi mãi, còn một vòng
+ * lặp đi tiếp sau lỗi là gửi thư trong khi người bấm tưởng nó đã dừng.
+ */
+export function autoContinueStep(input: {
+  ok: boolean;
+  remaining?: number;
+  processed?: number;
+  rateLimited?: boolean;
+  stopRequested: boolean;
+  round: number;
+}): AutoContinueStep {
+  if (!input.ok) return "error";
+  if (input.rateLimited) return "rate_limited";
+  if (typeof input.remaining !== "number" || !Number.isFinite(input.remaining)) return "error";
+  if (input.remaining <= 0) return "done";
+  if (!input.processed || input.processed <= 0) return "stuck";
+  if (input.stopRequested) return "stopped";
+  if (input.round + 1 >= AUTO_CONTINUE_MAX_ROUNDS) return "round_limit";
+  return "continue";
+}
+
+/** Câu báo khi lượt "Gửi tiếp tới hết" dừng (không có câu cho "continue"). */
+export const AUTO_CONTINUE_END_WORDS: Record<Exclude<AutoContinueStep, "continue">, string> = {
+  done: "Lô đã gửi xong.",
+  stopped: "Đã dừng theo yêu cầu. Phần còn lại vẫn nằm trong lô.",
+  error: "Đã dừng vì lần chạy vừa rồi báo lỗi.",
+  rate_limited: "Đã dừng vì nhà cung cấp email báo chạm giới hạn gửi. Chờ ít phút rồi bấm lại.",
+  stuck: "Đã dừng vì lần chạy vừa rồi không gửi thêm được lá nào.",
+  round_limit: "Đã dừng sau số lần chạy tối đa của một lượt. Bấm lại để đi tiếp."
+};

@@ -286,6 +286,25 @@ describe("gửi tiếp một lô dở", () => {
     expect(runEmailBatch).not.toHaveBeenCalled();
   });
 
+  it("trả về tiến độ cho nút Gửi tiếp tới hết, và tính giờ từ lúc lệnh bắt đầu", async () => {
+    const before = Date.now();
+    const result = await continueBulkSendAction(initialBulkMailActionState, form({ batch_id: BATCH }));
+    expect(result).toMatchObject({ ok: true, remaining: 5, processed: 25 });
+    expect(result.rateLimited).toBeUndefined();
+    const startedAt = vi.mocked(runEmailBatch).mock.calls[0][0].startedAt ?? 0;
+    expect(startedAt).toBeGreaterThanOrEqual(before);
+    expect(startedAt).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("lần chạy bị 429: báo rateLimited để vòng tự gửi tiếp dừng", async () => {
+    vi.mocked(runEmailBatch).mockResolvedValueOnce({
+      ok: true, sent: 3, failed: 1, skipped: 0, remaining: 40, problems: [], error: null, rateLimited: true
+    } as never);
+    const result = await continueBulkSendAction(initialBulkMailActionState, form({ batch_id: BATCH }));
+    expect(result).toMatchObject({ ok: true, remaining: 40, processed: 4, rateLimited: true });
+    expect(result.message).toContain("giới hạn");
+  });
+
   it("chạy tiếp với đúng lô đọc lại từ database", async () => {
     const result = await continueBulkSendAction(initialBulkMailActionState, form({ batch_id: BATCH }));
     expect(result.ok).toBe(true);

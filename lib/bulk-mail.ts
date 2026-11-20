@@ -1639,6 +1639,11 @@ export type BulkRunResult = {
   /** Người không nhận được thư, kèm lý do — tối đa vài dòng để còn đọc nổi. */
   problems: string[];
   error: string | null;
+  /**
+   * Nhà cung cấp trả 429 (chạm giới hạn tốc độ / hạn mức) nên lần chạy DỪNG ngay, không đốt phần
+   * còn lại của danh sách từng lá một. Nút "Gửi tiếp tới hết" dừng theo cờ này.
+   */
+  rateLimited?: boolean;
 };
 
 /**
@@ -1660,6 +1665,12 @@ export async function runEmailBatch(input: {
   /** HTML đã lưu của mẫu thiết kế (VAM00038). null / thiếu = thư chữ thuần, đi y như trước. */
   bodyHtml?: string | null;
   now?: () => number;
+  /**
+   * Mốc lệnh bắt đầu (cùng thước với `now`). Lệnh mở lô đã tốn thời gian dựng danh sách và chốt
+   * lô TRƯỚC khi gọi tới đây; ngân sách phải tính cả quãng đó, không thì lần chạy đầu vượt
+   * `maxDuration` của trang. Thiếu thì tính từ lúc vào hàm.
+   */
+  startedAt?: number;
 }): Promise<BulkRunResult> {
   const client = getSupabaseServiceRoleClient();
   if (!client) {
@@ -1682,7 +1693,7 @@ export async function runEmailBatch(input: {
   }
 
   const now = input.now ?? (() => Date.now());
-  const startedAt = now();
+  const startedAt = typeof input.startedAt === "number" && Number.isFinite(input.startedAt) ? input.startedAt : now();
 
   // Nhóm `event` mà lô không nhớ sự kiện nào thì cũng như lô không nhớ gửi cho
   // ai: dựng lại danh sách bằng một giá trị đoán là gửi nhầm người.
@@ -1771,6 +1782,7 @@ export async function runEmailBatch(input: {
   let sent = 0;
   let failed = 0;
   let skipped = 0;
+  let rateLimited = false;
   const problems: string[] = [];
 
   // Lọc lại HTML đã lưu MỘT lần cho cả lượt chạy, trước khi điền ô: cột trong database là thứ một
@@ -1822,6 +1834,11 @@ export async function runEmailBatch(input: {
     else {
       failed += 1;
       if (problems.length < 10) problems.push(`${recipient.fullName || recipient.email}: ${result.reason ?? "lỗi gửi"}`);
+      // 429: mọi lá sau cũng sẽ bị từ chối. Dừng ở đây, phần còn lại vẫn nằm trong lô cho lần sau.
+      if (result.providerStatus === 429) {
+        rateLimited = true;
+        break;
+      }
     }
   }
 
@@ -1845,7 +1862,7 @@ export async function runEmailBatch(input: {
     log("runEmailBatch:update", updateError);
   }
 
-  return { ok: true, sent, failed, skipped, remaining, problems, error: null };
+  return { ok: true, sent, failed, skipped, remaining, problems, error: null, ...(rateLimited ? { rateLimited } : {}) };
 }
 
 export type AudienceCount = { sendable: number; unreachable: number };

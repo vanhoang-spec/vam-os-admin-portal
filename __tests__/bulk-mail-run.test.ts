@@ -266,3 +266,40 @@ describe("cập nhật lô", () => {
     expect(updates.at(-1)).toMatchObject({ status: "running", completed_at: null });
   });
 });
+
+describe("lô to chạy liền mạch (100 thư / lần, 20/11/2026)", () => {
+  it("chỉ tiêu một lần chạy là 100, ngân sách 35 giây = 60 − 20 (một lời gọi treo) − 5", () => {
+    expect(BULK_SEND_CHUNK).toBe(100);
+    expect(BULK_TIME_BUDGET_MS).toBe(35_000);
+  });
+
+  it("nhà cung cấp trả 429: dừng ngay sau lá đó, báo rateLimited, phần còn lại để lần sau", async () => {
+    vi.mocked(sendTemplatedEmail)
+      .mockResolvedValueOnce({ ok: true, skipped: false } as never)
+      .mockResolvedValueOnce({ ok: false, skipped: false, reason: "quá giới hạn", providerStatus: 429 } as never);
+    const result = await run(population(10));
+    expect(result).toMatchObject({ ok: true, sent: 1, failed: 1, remaining: 8, rateLimited: true, error: null });
+    expect(sendTemplatedEmail).toHaveBeenCalledTimes(2);
+    // Lô chưa xong thì vẫn running.
+    expect(updates.at(-1)).toMatchObject({ status: "running", sent_count: 1, failed_count: 1 });
+  });
+
+  it("lỗi khác 429 không dừng lần chạy", async () => {
+    vi.mocked(sendTemplatedEmail)
+      .mockResolvedValueOnce({ ok: false, skipped: false, reason: "hộp thư sai", providerStatus: 422 } as never);
+    const result = await run(population(4));
+    expect(result).toMatchObject({ sent: 3, failed: 1, remaining: 0 });
+    expect(result.rateLimited).toBeUndefined();
+  });
+
+  it("ngân sách tính từ mốc lệnh bắt đầu: lệnh đã tốn gần hết thời gian thì không bắt đầu lá nào", async () => {
+    const result = await run(population(5), { now: () => 100_000, startedAt: 100_000 - BULK_TIME_BUDGET_MS });
+    expect(result).toMatchObject({ ok: true, sent: 0, remaining: 5 });
+    expect(sendTemplatedEmail).not.toHaveBeenCalled();
+  });
+
+  it("mốc bắt đầu còn trong ngân sách thì gửi bình thường", async () => {
+    const result = await run(population(5), { now: () => 100_000, startedAt: 100_000 - (BULK_TIME_BUDGET_MS - 1) });
+    expect(result).toMatchObject({ sent: 5, remaining: 0 });
+  });
+});
