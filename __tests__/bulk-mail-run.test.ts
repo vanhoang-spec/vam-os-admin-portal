@@ -24,6 +24,7 @@ type Tables = {
   memberships: Array<{ person_id: string; role: string }>;
   people: Array<{ id: string; full_name: string | null; email_primary: string | null }>;
   handled: Array<{ to_email: string; status?: string; error?: string | null }>;
+  batches?: Array<Record<string, unknown>>;
 };
 
 const updates: Array<Record<string, unknown>> = [];
@@ -56,7 +57,9 @@ function fakeClient(tables: Tables) {
               ? tables.people
               : table === "outbound_emails"
                 ? tables.handled
-                : [];
+                : table === "email_batches"
+                  ? tables.batches ?? []
+                  : [];
         return Promise.resolve(resolve({ data, error: null }));
       };
       return chain;
@@ -413,7 +416,7 @@ describe("khoá lô: một lô chỉ một lần chạy tại một thời đi�
     const calls = withRpc(population(3), async () => ({ data: false, error: null }));
     const result = await go();
     expect(result).toMatchObject({ ok: false, sent: 0, busy: true });
-    expect(result.error).toContain("đang được gửi");
+    expect(result.error).toContain("đang có một lần gửi khác chạy");
     expect(sendTemplatedEmail).not.toHaveBeenCalled();
     expect(updates).toEqual([]);
     expect(calls.map((call) => call[0])).toEqual(["email_batch_claim_run"]);
@@ -440,6 +443,20 @@ describe("khoá lô: một lô chỉ một lần chạy tại một thời đi�
     );
     const result = await go();
     expect(result).toMatchObject({ ok: true, sent: 2, error: null });
+  });
+
+  it("số đếm của lô đọc lại SAU khi giữ khoá: lần chạy vừa xong trước đó không bị ghi đè mất", async () => {
+    const tables = population(2);
+    // Bản `batch()` đọc từ trước (sent 0); trong database lần chạy trước đã cộng lên 85.
+    tables.batches = [{ id: BATCH, sent_count: 85, failed_count: 2, skipped_count: 0 }];
+    await run(tables);
+    expect(updates.at(-1)).toMatchObject({ sent_count: 87, failed_count: 2 });
+  });
+
+  it("đọc lại số đếm hỏng / không thấy: dùng bản đã có, vẫn gửi bình thường", async () => {
+    const result = await run(population(2), { batch: batch({ sentCount: 40 }) });
+    expect(result.sent).toBe(2);
+    expect(updates.at(-1)).toMatchObject({ sent_count: 42 });
   });
 
   it("lô sai hình dạng (không ghi nhóm nhận) bị từ chối trước, không xin khoá", async () => {

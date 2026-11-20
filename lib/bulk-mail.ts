@@ -1777,7 +1777,7 @@ export async function runEmailBatch(input: {
       problems: [],
       busy: true,
       error:
-        "Lô này đang được gửi ở một cửa sổ khác (hoặc bởi người khác). Chờ lần đó xong — tối đa khoảng một phút — rồi bấm lại."
+        "Lô này đang có một lần gửi khác chạy (ở cửa sổ khác, do người khác bấm, hoặc lần trước chưa kịp nhả). Chờ khoảng 1–2 phút rồi bấm lại."
     };
   }
 
@@ -1795,6 +1795,32 @@ export async function runEmailBatch(input: {
   }
 }
 
+/** Số đếm hiện tại của lô, đọc thẳng từ database; đọc hỏng hoặc không thấy thì dùng bản đã có. */
+async function readBatchCounts(
+  client: any,
+  batch: EmailBatchRow
+): Promise<{ sentCount: number; failedCount: number; skippedCount: number }> {
+  const fallback = { sentCount: batch.sentCount, failedCount: batch.failedCount, skippedCount: batch.skippedCount };
+  try {
+    const { data, error } = await client
+      .from("email_batches")
+      .select("id, sent_count, failed_count, skipped_count")
+      .eq("id", batch.id)
+      .limit(1);
+    const row = Array.isArray(data) ? data.find((item: { id?: unknown }) => String(item?.id) === batch.id) : null;
+    if (error || !row) return fallback;
+    const read = (value: unknown, old: number) => (Number.isFinite(Number(value)) ? Number(value) : old);
+    return {
+      sentCount: read(row.sent_count, batch.sentCount),
+      failedCount: read(row.failed_count, batch.failedCount),
+      skippedCount: read(row.skipped_count, batch.skippedCount)
+    };
+  } catch (error) {
+    log("runEmailBatch:counts", error);
+    return fallback;
+  }
+}
+
 /** Phần thân của một lần chạy, sau khi đã giữ khoá lô. */
 async function runClaimedBatch(
   client: any,
@@ -1803,6 +1829,11 @@ async function runClaimedBatch(
   now: () => number,
   startedAt: number
 ): Promise<BulkRunResult> {
+  // Số đếm của lô đọc lại SAU khi giữ khoá: `input.batch` được đọc trước lúc xin khoá, và lần chạy
+  // vừa xong ngay trước đó có thể đã cộng thêm — cộng vào bản cũ là xoá mất phần của lần đó. Đọc hỏng
+  // thì dùng bản cũ: số đếm chỉ để hiển thị, không quyết định ai nhận thư.
+  const base = await readBatchCounts(client, input.batch);
+
   // Lô `custom` (và lô "chưa có recap") đọc ĐÚNG danh sách đã chốt lúc mở lô, không dựng lại gì:
   // người không nằm trong bản xem trước thì không nhận thư, kể cả khi dữ liệu nguồn đã đổi.
   const recipients =
@@ -1953,11 +1984,11 @@ async function runClaimedBatch(
   const { error: updateError } = await client
     .from("email_batches")
     .update({
-      sent_count: input.batch.sentCount + sent,
+      sent_count: base.sentCount + sent,
       // Lá bị cấu hình chặn quay lại ở lần sau (alreadyHandled bỏ qua dòng "skipped"): cộng vào lô
       // là đếm cùng một người mỗi lần bấm. Số lá bị chặn của lần chạy vẫn nói trong câu báo.
-      skipped_count: input.batch.skippedCount,
-      failed_count: input.batch.failedCount + ledgeredFailed,
+      skipped_count: base.skippedCount,
+      failed_count: base.failedCount + ledgeredFailed,
       status: done ? "completed" : "running",
       completed_at: done ? new Date().toISOString() : null
     })
