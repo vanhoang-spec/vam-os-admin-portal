@@ -1820,7 +1820,9 @@ export async function runEmailBatch(input: {
   const richHtml = laMauThietKe(input.bodyHtml) ? locHtmlThu(input.bodyHtml) : null;
 
   for (const recipient of pending) {
-    if (sent + failed + skipped >= runCap) break;
+    // Trần đếm lá ĐÃ GHI SỔ: lá lỗi điền ô không tốn lời gọi nhà cung cấp, không tốn hạn mức, và
+    // quay lại ở đầu danh sách mỗi lần — để nó chiếm trần thì người hợp lệ phía sau không bao giờ tới lượt.
+    if (sent + (failed - fillFailed) + skipped >= runCap) break;
     if (now() - startedAt >= BULK_TIME_BUDGET_MS) break;
 
     const values = buildRecipientValues({

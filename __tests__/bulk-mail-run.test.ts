@@ -330,6 +330,12 @@ describe("lô to chạy liền mạch (85 thư / lần, 20/11/2026)", () => {
     expect(sendTemplatedEmail).not.toHaveBeenCalled();
   });
 
+  it("lá lỗi điền ô không chiếm trần một lần chạy: người hợp lệ phía sau vẫn tới lượt", async () => {
+    const result = await run(population(BULK_SEND_CHUNK + 15), { body: "Chào {{ten_nguoi_nhan}}, {{o_khong_co}}." });
+    expect(result.fillFailed).toBe(BULK_SEND_CHUNK + 15);
+    expect(result.remaining).toBe(BULK_SEND_CHUNK + 15);
+  });
+
   it("lỗi khác 429 không dừng lần chạy", async () => {
     vi.mocked(sendTemplatedEmail)
       .mockResolvedValueOnce({ ok: false, skipped: false, reason: "hộp thư sai", providerStatus: 422 } as never);
