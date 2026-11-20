@@ -32,12 +32,23 @@ import {
   type EventCheckinFilter
 } from "@/lib/bulk-mail-custom-core";
 import { customRunAllowance, outboundRelationFor } from "@/lib/bulk-mail-external-core";
+import {
+  RECAP_AUDIENCE,
+  countCcMentors,
+  formatRecapMonth,
+  isRecapMonth,
+  menteesWithoutRecap,
+  recapMonthChoices,
+  type RecapMatchRow,
+  type RecapMonthOption,
+  type RecapRow
+} from "@/lib/bulk-mail-recap-core";
 import { normalizeEmailAddress } from "@/lib/email-core";
 import { DAILY_EMAIL_LIMIT } from "@/lib/email-quota-core";
 import { countSentInWindow } from "@/lib/mentee-invite-dispatch";
 import { escapeIlikePattern } from "@/lib/identity";
 import { readAllPages, readAllPagesIn, readBounded } from "@/lib/paged-read";
-import { formatDate } from "@/lib/utils";
+import { formatDate, vietnamDateKey } from "@/lib/utils";
 import { displayCurrentMemberCode } from "@/lib/member-code-core";
 import { renderTemplate, renderTemplateHtml, type TemplateKind } from "@/lib/email-templates-core";
 import { laMauThietKe, locHtmlThu } from "@/lib/mail-soan-thao-core";
@@ -91,6 +102,8 @@ export async function listBulkRecipients(input: {
   eventId?: string | null;
   /** Chỉ dùng với nhóm `event`. */
   coversSeries?: boolean;
+  /** Chỉ dùng với nhóm `mentee_no_recap_month`: tháng `YYYY-MM`. */
+  month?: string | null;
 }): Promise<{ partition: RecipientPartition; error: string | null; label?: string }> {
   const empty: RecipientPartition = { sendable: [], unreachable: [] };
   const client = getSupabaseServiceRoleClient();
@@ -113,6 +126,8 @@ export async function listBulkRecipients(input: {
     result = await rejectedMenteeRecipients(client, input.seasonId, input.audience);
   } else if (input.audience === "mentee_interview_rejected") {
     result = await interviewRejectedMenteeRecipients(client, input.seasonId);
+  } else if (input.audience === RECAP_AUDIENCE) {
+    result = await noRecapRecipients(client, input.seasonId, input.month ?? null);
   } else {
     result = await eventRecipients(client, input.seasonId, input.eventId ?? null, input.coversSeries === true);
   }
@@ -691,6 +706,172 @@ async function interviewRejectedMenteeRecipients(client: any, seasonId: string):
   return { rows, error: null };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Mentee chưa có recap trong tháng (thư nhắc ngày 20) — quy ước ở lib/bulk-mail-recap-core.ts
+// ─────────────────────────────────────────────────────────────────────────────
+
+type NoRecapPerson = { id: string; full_name: string | null; email_primary: string | null; member_code: string | null; gender: string | null };
+type NoRecapSource = { matches: RecapMatchRow[]; recaps: RecapRow[]; people: Map<string, NoRecapPerson> };
+
+/**
+ * Cặp, recap hợp lệ và hồ sơ của mùa — đọc MỘT lần, rồi tính được cho mọi tháng (ô chọn tháng
+ * đếm sẵn nhiều tháng). Đọc hỏng bước nào thì trả lỗi cho cả nhóm: danh sách nhắc thiếu một trang
+ * recap là thư nhắc gửi cho người đã đăng bài.
+ */
+async function readNoRecapSource(client: any, seasonId: string): Promise<{ source: NoRecapSource | null; error: string | null }> {
+  const [matches, recaps] = await Promise.all([
+    readAllPages<{
+      id: string;
+      mentee_person_id: string | null;
+      mentor_person_id: string | null;
+      status: string | null;
+      matched_at: string | null;
+      ended_at: string | null;
+      updated_at: string | null;
+    }>("matches", "id, mentee_person_id, mentor_person_id, status, matched_at, ended_at, updated_at", (projection) =>
+      client.from("matches").select(projection).eq("season_id", seasonId)
+    ),
+    readAllPages<{
+      id: string;
+      mentee_person_id: string | null;
+      meeting_date: string;
+      meeting_month: string;
+      status: string;
+      captured_by: string | null;
+      created_at: string | null;
+    }>("mentoring_recaps", "id, mentee_person_id, meeting_date, meeting_month, status, captured_by, created_at", (projection) =>
+      client.from("mentoring_recaps").select(projection).eq("season_id", seasonId).in("status", ["submitted", "needs_review"])
+    )
+  ]);
+  if (matches.error || recaps.error) {
+    log("listBulkRecipients:no-recap", matches.error ?? recaps.error);
+    return { source: null, error: VI_ERROR };
+  }
+
+  const ids = new Set<string>();
+  for (const row of matches.data) {
+    if (row.mentee_person_id) ids.add(String(row.mentee_person_id));
+    if (row.mentor_person_id) ids.add(String(row.mentor_person_id));
+  }
+  const people = await readAllPagesIn<NoRecapPerson>(
+    client,
+    "people",
+    "id",
+    Array.from(ids),
+    "id, full_name, email_primary, member_code, gender"
+  );
+  if (people.error) {
+    log("listBulkRecipients:no-recap-people", people.error);
+    return { source: null, error: VI_ERROR };
+  }
+
+  return {
+    source: {
+      matches: matches.data.map((row) => ({
+        id: String(row.id),
+        menteePersonId: row.mentee_person_id ? String(row.mentee_person_id) : null,
+        mentorPersonId: row.mentor_person_id ? String(row.mentor_person_id) : null,
+        status: String(row.status ?? ""),
+        matchedAt: row.matched_at ?? null,
+        endedAt: row.ended_at ?? null,
+        updatedAt: row.updated_at ?? null
+      })),
+      recaps: recaps.data.map((row) => ({
+        menteePersonId: row.mentee_person_id ? String(row.mentee_person_id) : null,
+        meetingDate: String(row.meeting_date ?? ""),
+        meetingMonth: String(row.meeting_month ?? ""),
+        status: String(row.status ?? ""),
+        capturedBy: row.captured_by ?? null,
+        createdAt: row.created_at ?? null
+      })),
+      people: new Map(people.data.map((row) => [String(row.id), row]))
+    },
+    error: null
+  };
+}
+
+/** Danh sách nhắc của một tháng thành người nhận: mentee là người nhận, mentor của cặp là CC. */
+function noRecapRowsFor(source: NoRecapSource, month: string): BulkRecipient[] {
+  const { noRecap } = menteesWithoutRecap({ month, matches: source.matches, recaps: source.recaps });
+  return noRecap.map((entry) => {
+    const mentee = source.people.get(entry.menteePersonId);
+    const mentor = entry.mentorPersonId ? source.people.get(entry.mentorPersonId) : undefined;
+    const mentorEmail = normalizeEmailAddress(mentor?.email_primary);
+    const mentorName = String(mentor?.full_name ?? "").trim() || "(chưa có tên)";
+    const memberCode = String(mentee?.member_code ?? "").trim();
+    const gender = String(mentee?.gender ?? "").trim();
+    return {
+      personId: entry.menteePersonId,
+      fullName: String(mentee?.full_name ?? "").trim(),
+      email: String(mentee?.email_primary ?? "").trim(),
+      role: "mentee" as const,
+      ...(memberCode ? { memberCode } : {}),
+      ...(gender ? { gender } : {}),
+      ...(mentorEmail ? { ccEmails: [mentorEmail] } : {}),
+      ...(mentorEmail
+        ? {}
+        : {
+            ccWarning: entry.mentorPersonId
+              ? `mentor ${mentorName} chưa có email hợp lệ, thư gửi không CC`
+              : "cặp chưa ghi mentor, thư gửi không CC"
+          })
+    };
+  });
+}
+
+/**
+ * Mentee chưa có recap trong tháng `month`, mỗi người kèm CC mentor của cặp active mới nhất.
+ * Mentor thiếu email thì mentee VẪN nhận thư (thư nhắc là cho mentee) và dòng đó mang cảnh báo.
+ */
+async function noRecapRecipients(client: any, seasonId: string, month: string | null): Promise<RecipientRows> {
+  if (!isRecapMonth(month)) return { rows: [], error: "Chưa chọn tháng cho nhóm mentee chưa có recap." };
+  const read = await readNoRecapSource(client, seasonId);
+  if (read.error || !read.source) return { rows: [], error: read.error ?? VI_ERROR };
+  const coded = await attachLegacyCodes(client, noRecapRowsFor(read.source, month));
+  if (coded.error) return coded;
+  return { rows: coded.rows, error: null, label: `Mentee chưa có recap tháng ${formatRecapMonth(month)}` };
+}
+
+/**
+ * Các tháng chọn được cho nhóm, mỗi tháng đếm sẵn qua ĐÚNG phép lọc + partitionRecipients mà
+ * lệnh gửi dùng — con số trong ô chọn phải bằng con số người bấm gõ xác nhận.
+ */
+async function listRecapMonthOptions(
+  seasonId: string,
+  now: Date = new Date()
+): Promise<{ options: RecapMonthOption[]; error: string | null }> {
+  const client = getSupabaseServiceRoleClient();
+  if (!client) return { options: [], error: VI_ERROR };
+  const read = await readNoRecapSource(client, seasonId);
+  if (read.error || !read.source) return { options: [], error: read.error ?? VI_ERROR };
+  const source = read.source;
+  if (!source.matches.length) return { options: [], error: null };
+
+  const earliest = source.matches
+    .map((row) => vietnamDateKey(row.matchedAt))
+    .filter((day): day is string => Boolean(day))
+    .sort()[0];
+  const currentMonth = String(vietnamDateKey(now) ?? "").slice(0, 7);
+  const months = recapMonthChoices({ currentMonth, earliestMonth: earliest ? earliest.slice(0, 7) : null });
+
+  const options = months.map((month) => {
+    const partition = partitionRecipients(
+      noRecapRowsFor(source, month)
+        .slice()
+        .sort((a, b) => a.fullName.localeCompare(b.fullName, "vi") || a.email.localeCompare(b.email))
+    );
+    return {
+      month,
+      label: `Tháng ${formatRecapMonth(month)}`,
+      sendable: partition.sendable.length,
+      unreachable: partition.unreachable.length,
+      ccMentors: countCcMentors(partition.sendable),
+      ccMissing: partition.sendable.filter((row) => !row.ccEmails?.length).length
+    };
+  });
+  return { options, error: null };
+}
+
 /**
  * Người đã đăng ký một sự kiện của mùa — hoặc cả chuỗi mà sự kiện ấy thuộc về.
  *
@@ -1048,6 +1229,8 @@ async function readFrozenRecipients(
   batch: EmailBatchRow
 ): Promise<{ partition: RecipientPartition; error: string | null }> {
   const empty: RecipientPartition = { sendable: [], unreachable: [] };
+  // Chỉ lô nhóm "chưa có recap" mang CC; lô custom đọc đúng các cột như trước.
+  const withCc = batch.audience === RECAP_AUDIENCE;
   const result = await readAllPages<{
     id: string;
     position: number;
@@ -1056,8 +1239,11 @@ async function readFrozenRecipients(
     email: string;
     full_name: string;
     role: string;
-  }>("email_batch_recipients", "id, position, relation_table, relation_id, email, full_name, role", (projection) =>
-    client.from("email_batch_recipients").select(projection).eq("batch_id", batch.id)
+    cc_emails?: unknown;
+  }>(
+    "email_batch_recipients",
+    `id, position, relation_table, relation_id, email, full_name, role${withCc ? ", cc_emails" : ""}`,
+    (projection) => client.from("email_batch_recipients").select(projection).eq("batch_id", batch.id)
   );
   if (result.error) {
     log("runEmailBatch:frozen", result.error);
@@ -1077,12 +1263,21 @@ async function readFrozenRecipients(
     // lá thư về đúng dòng này. Dòng VAM mà thiếu relation_id, hay dòng ngoài mà lại có, là danh sách hỏng.
     const external = source === "external";
     if (external !== (row.relation_id === null || row.relation_id === undefined)) return { partition: empty, error: broken };
+    // CC đã chốt phải đọc lại được nguyên vẹn: một địa chỉ hỏng ở đây là CC lặng lẽ biến mất ở
+    // lần "Gửi tiếp", trong khi người bấm đã xác nhận lô có CC.
+    let ccEmails: string[] = [];
+    if (withCc) {
+      if (!Array.isArray(row.cc_emails)) return { partition: empty, error: broken };
+      ccEmails = row.cc_emails.map((cc) => normalizeEmailAddress(cc) ?? "");
+      if (ccEmails.some((cc) => !cc)) return { partition: empty, error: broken };
+    }
     sendable.push({
       personId: external ? String(row.id) : String(row.relation_id),
       fullName: String(row.full_name ?? "").trim(),
       email,
       role,
-      relationTable: source
+      relationTable: source,
+      ...(ccEmails.length ? { ccEmails } : {})
     });
   }
   const details = await attachFrozenPeopleDetails(client, sendable);
@@ -1209,6 +1404,37 @@ export async function createCustomEmailBatch(input: {
   note: string;
   actorAdminUserId: string | null;
 }): Promise<{ batch: EmailBatchRow | null; error: string | null }> {
+  return createFrozenEmailBatch({ ...input, audience: "custom" });
+}
+
+/**
+ * Mở một lô nhóm "Mentee chưa có recap trong tháng" và chốt danh sách (kèm CC từng thư) vào nó.
+ * Cùng đường chốt với lô custom: "Gửi tiếp" đọc danh sách chốt, không dựng lại từ dữ liệu recap
+ * đã đổi sau lúc bấm (xem migration 20261120150000).
+ */
+export async function createNoRecapEmailBatch(input: {
+  seasonId: string;
+  kind: TemplateKind;
+  templateId: string;
+  month: string;
+  recipients: BulkRecipient[];
+  note: string;
+  actorAdminUserId: string | null;
+}): Promise<{ batch: EmailBatchRow | null; error: string | null }> {
+  if (!isRecapMonth(input.month)) return { batch: null, error: "Chưa chọn tháng cho nhóm mentee chưa có recap." };
+  return createFrozenEmailBatch({ ...input, audience: RECAP_AUDIENCE, audienceMonth: input.month });
+}
+
+async function createFrozenEmailBatch(input: {
+  seasonId: string;
+  kind: TemplateKind;
+  templateId: string;
+  audience: "custom" | typeof RECAP_AUDIENCE;
+  audienceMonth?: string;
+  recipients: BulkRecipient[];
+  note: string;
+  actorAdminUserId: string | null;
+}): Promise<{ batch: EmailBatchRow | null; error: string | null }> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return { batch: null, error: VI_ERROR };
   if (!input.recipients.length) return { batch: null, error: "Danh sách chưa có ai được chọn." };
@@ -1217,7 +1443,8 @@ export async function createCustomEmailBatch(input: {
     seasonId: input.seasonId,
     kind: input.kind,
     templateId: input.templateId,
-    audience: "custom",
+    audience: input.audience,
+    ...(input.audience === RECAP_AUDIENCE ? { audienceMonth: input.audienceMonth } : {}),
     requestedCount: input.recipients.length,
     note: input.note,
     actorAdminUserId: input.actorAdminUserId
@@ -1234,7 +1461,9 @@ export async function createCustomEmailBatch(input: {
       relation_id: row.relationTable === "external" ? null : row.personId,
       email: row.email,
       full_name: row.fullName,
-      role: row.role
+      role: row.role,
+      // Lô custom ghi đúng các cột như trước; lô "chưa có recap" ghi CC của từng thư.
+      ...(input.audience === RECAP_AUDIENCE ? { cc_emails: row.ccEmails ?? [] } : {})
     }));
     const { error } = await client.from("email_batch_recipients").insert(chunk);
     if (error) {
@@ -1270,6 +1499,8 @@ export type EmailBatchRow = {
   audienceEventId: string | null;
   /** Nhóm `event` có gồm cả các buổi khác cùng chuỗi không. */
   audienceCoversSeries: boolean;
+  /** Tháng `YYYY-MM` của nhóm `mentee_no_recap_month`, chốt lúc mở lô. Null với mọi nhóm khác. */
+  audienceMonth?: string | null;
   status: "running" | "completed" | "failed";
   requestedCount: number;
   sentCount: number;
@@ -1289,6 +1520,7 @@ function toBatch(raw: Record<string, unknown>): EmailBatchRow {
     audience: isBulkAudience(raw.audience) ? raw.audience : null,
     audienceEventId: raw.audience_event_id ? String(raw.audience_event_id) : null,
     audienceCoversSeries: raw.audience_covers_series === true,
+    audienceMonth: isRecapMonth(raw.audience_month) ? raw.audience_month : null,
     status: raw.status as EmailBatchRow["status"],
     requestedCount: Number(raw.requested_count ?? 0),
     sentCount: Number(raw.sent_count ?? 0),
@@ -1301,7 +1533,7 @@ function toBatch(raw: Record<string, unknown>): EmailBatchRow {
 }
 
 const BATCH_COLUMNS =
-  "id, season_id, kind, template_id, audience, audience_event_id, audience_covers_series, status, requested_count, sent_count, skipped_count, failed_count, note, created_at, completed_at";
+  "id, season_id, kind, template_id, audience, audience_event_id, audience_covers_series, audience_month, status, requested_count, sent_count, skipped_count, failed_count, note, created_at, completed_at";
 
 export async function listEmailBatches(
   seasonId: string,
@@ -1331,12 +1563,20 @@ export async function createEmailBatch(input: {
   audience: BulkAudience;
   audienceEventId?: string | null;
   audienceCoversSeries?: boolean;
+  /** Chỉ nhóm `mentee_no_recap_month`. */
+  audienceMonth?: string | null;
   requestedCount: number;
   note: string;
   actorAdminUserId: string | null;
 }): Promise<{ batch: EmailBatchRow | null; error: string | null }> {
   const client = getSupabaseServiceRoleClient();
   if (!client) return { batch: null, error: VI_ERROR };
+
+  // Nhóm "chưa có recap" không có tháng là lô không dựng lại được; chặn ở đây thay vì để CHECK
+  // của database ném lỗi khó hiểu giữa thao tác gửi.
+  if (input.audience === RECAP_AUDIENCE && !isRecapMonth(input.audienceMonth)) {
+    return { batch: null, error: "Chưa chọn tháng cho nhóm mentee chưa có recap." };
+  }
 
   const { data, error } = await client
     .from("email_batches")
@@ -1349,6 +1589,8 @@ export async function createEmailBatch(input: {
       // bắt điều này; ghi đúng ngay từ đây để không lô nào bị từ chối lúc mở.
       audience_event_id: input.audience === "event" ? input.audienceEventId ?? null : null,
       audience_covers_series: input.audience === "event" && input.audienceCoversSeries === true,
+      // Chỉ thêm khoá khi là nhóm mới: lô nhóm cũ ghi đúng các cột như trước.
+      ...(input.audience === RECAP_AUDIENCE ? { audience_month: input.audienceMonth } : {}),
       requested_count: input.requestedCount,
       note: input.note,
       created_by: input.actorAdminUserId,
@@ -1456,10 +1698,22 @@ export async function runEmailBatch(input: {
     };
   }
 
-  // Lô `custom` đọc ĐÚNG danh sách đã chốt lúc mở lô, không dựng lại gì: người không nằm
-  // trong bản xem trước thì không nhận thư, kể cả khi dữ liệu nguồn đã đổi.
+  if (audience === RECAP_AUDIENCE && !input.batch.audienceMonth) {
+    return {
+      ok: false,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      remaining: 0,
+      problems: [],
+      error: "Lô này không ghi lại tháng của nhóm mentee chưa có recap. Vui lòng mở lô mới."
+    };
+  }
+
+  // Lô `custom` (và lô "chưa có recap") đọc ĐÚNG danh sách đã chốt lúc mở lô, không dựng lại gì:
+  // người không nằm trong bản xem trước thì không nhận thư, kể cả khi dữ liệu nguồn đã đổi.
   const recipients =
-    audience === "custom"
+    audience === "custom" || audience === RECAP_AUDIENCE
       ? await readFrozenRecipients(client, input.batch)
       : await listBulkRecipients({
           seasonId: input.batch.seasonId,
@@ -1559,6 +1813,7 @@ export async function runEmailBatch(input: {
       ...(html?.ok ? { html: html.html } : {}),
       relation: outboundRelationFor(recipient),
       batchId: input.batch.id,
+      ...(recipient.ccEmails?.length ? { cc: recipient.ccEmails } : {}),
       ...(dinhKem.attachments.length ? { attachments: dinhKem.attachments } : {})
     });
 
@@ -1608,6 +1863,7 @@ export async function countBulkRecipients(
 ): Promise<{
   counts: Record<FixedBulkAudience, AudienceCount>;
   events: BulkEventOption[];
+  recapMonths: RecapMonthOption[];
   error: string | null;
 }> {
   const counts = {} as Record<FixedBulkAudience, AudienceCount>;
@@ -1615,7 +1871,7 @@ export async function countBulkRecipients(
 
   for (const audience of FIXED_BULK_AUDIENCES) {
     const result = await listBulkRecipients({ seasonId, audience });
-    if (result.error) return { counts, events: [], error: result.error };
+    if (result.error) return { counts, events: [], recapMonths: [], error: result.error };
     counts[audience] = {
       sendable: result.partition.sendable.length,
       unreachable: result.partition.unreachable.length
@@ -1623,9 +1879,12 @@ export async function countBulkRecipients(
   }
 
   const events = await listEventOptions(seasonId);
-  if (events.error) return { counts, events: [], error: events.error };
+  if (events.error) return { counts, events: [], recapMonths: [], error: events.error };
 
-  return { counts, events: events.options, error: null };
+  const recapMonths = await listRecapMonthOptions(seasonId);
+  if (recapMonths.error) return { counts, events: events.options, recapMonths: [], error: recapMonths.error };
+
+  return { counts, events: events.options, recapMonths: recapMonths.options, error: null };
 }
 
 /**

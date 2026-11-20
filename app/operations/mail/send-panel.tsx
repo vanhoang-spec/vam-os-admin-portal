@@ -7,6 +7,7 @@ import {
   BULK_AUDIENCE_LABELS,
   BULK_SEND_CHUNK,
   FIXED_BULK_AUDIENCES,
+  NO_RECAP_AUDIENCE_HINT,
   type BulkAudience,
   type BulkEventOption,
   type FixedBulkAudience
@@ -20,6 +21,7 @@ import {
   sendTestEmailAction,
   startBulkSendAction
 } from "@/app/actions/bulk-mail";
+import type { RecapMonthOption } from "@/lib/bulk-mail-recap-core";
 import { CustomListBuilder } from "./custom-list-builder";
 import { MailAttachmentPicker, MailAttachmentsField, type MailAttachment } from "./mail-attachments";
 
@@ -128,6 +130,7 @@ export function SendPanel({
   templates,
   counts,
   eventOptions = [],
+  recapMonthOptions = [],
   batches,
   canSend
 }: {
@@ -135,6 +138,8 @@ export function SendPanel({
   counts: AudienceCounts;
   /** Sự kiện chọn được cho nhóm "người đã đăng ký một sự kiện". */
   eventOptions?: BulkEventOption[];
+  /** Tháng chọn được cho nhóm "Mentee chưa có recap trong tháng", đếm sẵn. */
+  recapMonthOptions?: RecapMonthOption[];
   batches: BatchSummary[];
   canSend: boolean;
 }) {
@@ -155,6 +160,7 @@ export function SendPanel({
   const [audienceChoice, setAudienceChoice] = useState<BulkAudience>("mentee");
   const [eventChoice, setEventChoice] = useState("");
   const [coversSeries, setCoversSeries] = useState(true);
+  const [monthChoice, setMonthChoice] = useState("");
   // Tệp đính kèm (VAM00037) dùng chung cho thư thử, gửi nhóm cố định và Danh sách tùy chỉnh: thứ
   // người bấm thấy trong danh sách là đúng thứ mọi form mang đi.
   const [attachments, setAttachments] = useState<MailAttachment[]>([]);
@@ -176,7 +182,13 @@ export function SendPanel({
   // Nhóm "sự kiện" mà không còn sự kiện nào chọn được thì rơi về nhóm đầu tiên,
   // chứ không để ô chọn hiện một nhóm còn form gửi lên nhóm khác.
   const audience: BulkAudience =
-    audienceChoice === "event" && !eventOptions.length ? "mentee" : audienceChoice;
+    (audienceChoice === "event" && !eventOptions.length) ||
+    (audienceChoice === "mentee_no_recap_month" && !recapMonthOptions.length)
+      ? "mentee"
+      : audienceChoice;
+  // Cùng một chỗ quyết định "tháng nào" cho ô chọn lẫn form gửi, như mẫu thư và sự kiện.
+  const selectedMonth =
+    recapMonthOptions.find((row) => row.month === monthChoice) ?? recapMonthOptions[0] ?? null;
   const selectedEvent =
     eventOptions.find((row) => row.id === eventChoice) ?? eventOptions[0] ?? null;
   const seriesAvailable = Boolean(selectedEvent && selectedEvent.seriesSendable !== null);
@@ -195,6 +207,10 @@ export function SendPanel({
             }
           : { sendable: selectedEvent.sendable, unreachable: selectedEvent.unreachable }
         : ZERO
+      : audience === "mentee_no_recap_month"
+      ? selectedMonth
+        ? { sendable: selectedMonth.sendable, unreachable: selectedMonth.unreachable }
+        : ZERO
       : counts[audience] ?? ZERO;
 
   const audienceText =
@@ -204,6 +220,8 @@ export function SendPanel({
       ? selectedEvent
         ? `người đã đăng ký ${selectedEvent.label}${useSeries ? " (cả chuỗi)" : ""}`
         : "người đã đăng ký sự kiện"
+      : audience === "mentee_no_recap_month"
+      ? `mentee chưa có recap ${selectedMonth ? selectedMonth.label.toLowerCase() : "trong tháng"}`
       : lowerFirst(BULK_AUDIENCE_LABELS[audience]);
 
   const runningBatches = batches.filter((row) => row.status === "running");
@@ -278,6 +296,9 @@ export function SendPanel({
                 {BULK_AUDIENCE_LABELS[key]} — {(counts[key] ?? ZERO).sendable} người
               </option>
             ))}
+            {recapMonthOptions.length ? (
+              <option value="mentee_no_recap_month">{BULK_AUDIENCE_LABELS.mentee_no_recap_month}…</option>
+            ) : null}
             {eventOptions.length ? (
               <option value="event">{BULK_AUDIENCE_LABELS.event}…</option>
             ) : null}
@@ -286,6 +307,10 @@ export function SendPanel({
           {audience === "custom" ? (
             <p className="mt-1 text-xs text-slate-600" data-testid="send-audience-hint">
               Gộp nhiều nguồn, thêm hoặc bỏ từng người, xem trước rồi mới gửi. Danh sách được chốt vào lô.
+            </p>
+          ) : audience === "mentee_no_recap_month" ? (
+            <p className="mt-1 text-xs text-slate-600" data-testid="send-audience-hint">
+              {NO_RECAP_AUDIENCE_HINT}
             </p>
           ) : audience !== "event" ? (
             <p className="mt-1 text-xs text-slate-600" data-testid="send-audience-hint">
@@ -339,6 +364,39 @@ export function SendPanel({
         </div>
       ) : null}
 
+      {audience === "mentee_no_recap_month" && selectedMonth ? (
+        <div className="grid gap-3 rounded-md border border-vam-line bg-slate-50 p-3" data-testid="send-recap-month">
+          <div>
+            <label htmlFor="send-recap-month" className="mb-1 block text-sm font-medium text-vam-ink">
+              Tháng
+            </label>
+            <select
+              id="send-recap-month"
+              value={selectedMonth.month}
+              onChange={(event) => setMonthChoice(event.target.value)}
+              className="w-full rounded-md border border-vam-line bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-vam-green"
+            >
+              {recapMonthOptions.map((row) => (
+                <option key={row.month} value={row.month}>
+                  {row.label} — {row.sendable} mentee
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="text-sm text-vam-ink" data-testid="send-recap-counts">
+            <strong className="tabular-nums">{selectedMonth.sendable}</strong> mentee nhận thư, CC{" "}
+            <strong className="tabular-nums">{selectedMonth.ccMentors}</strong> mentor (mentor của cặp
+            active mới nhất).
+          </p>
+          {selectedMonth.ccMissing > 0 ? (
+            <p className="text-xs text-amber-800" data-testid="send-recap-cc-missing">
+              {selectedMonth.ccMissing} thư gửi không CC: mentor chưa có email hợp lệ hoặc cặp chưa ghi
+              mentor. Mentee vẫn nhận thư.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="border-t border-vam-line pt-4">
         <h3 className="mb-2 text-sm font-semibold text-vam-ink">Tệp đính kèm</h3>
         <MailAttachmentPicker files={attachments} onChange={setAttachments} onBusyChange={setUploading} />
@@ -373,6 +431,11 @@ export function SendPanel({
           value={audience === "event" && selectedEvent ? selectedEvent.id : ""}
         />
         <input type="hidden" name="covers_series" value={useSeries ? "true" : "false"} />
+        <input
+          type="hidden"
+          name="audience_month"
+          value={audience === "mentee_no_recap_month" && selectedMonth ? selectedMonth.month : ""}
+        />
         <MailAttachmentsField files={attachments} />
 
         <p className="text-sm text-vam-ink">

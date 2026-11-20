@@ -1551,12 +1551,21 @@ export async function sendTemplatedEmail(input: {
    * phần chữ thuần. Thiếu / rỗng thì thư đi y như trước, HTML dựng từ chữ bằng `textToHtmlEmail`.
    */
   html?: string | null;
+  /**
+   * CC của riêng thư này (nhóm "Mentee chưa có recap": mentor của cặp). Thiếu / rỗng thì thư đi y
+   * như trước. Địa chỉ hỏng bị bỏ, không làm hỏng cả lá thư gửi người nhận chính.
+   */
+  cc?: string[];
 }): Promise<SendEmailResult> {
   const subject = String(input.subject ?? "").replace(/[\r\n]+/g, " ").trim();
   const body = String(input.body ?? "").trim();
   if (!subject || !body) {
     return { ok: false, skipped: false, reason: "Thư chưa có tiêu đề hoặc nội dung." };
   }
+  const to = normalizeEmailAddress(input.toEmail);
+  const cc = Array.from(
+    new Set((input.cc ?? []).map((email) => normalizeEmailAddress(email)).filter((email): email is string => Boolean(email) && email !== to))
+  );
 
   return deliver(
     input.kind,
@@ -1565,7 +1574,8 @@ export async function sendTemplatedEmail(input: {
       subject,
       text: body,
       html: laMauThietKe(input.html) ? dungThanThuHtml(input.html) : textToHtmlEmail(body),
-      ...(input.attachments?.length ? { attachments: input.attachments } : {})
+      ...(input.attachments?.length ? { attachments: input.attachments } : {}),
+      ...(cc.length ? { cc } : {})
     },
     input.relation ?? null,
     input.batchId ?? null
