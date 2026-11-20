@@ -32,6 +32,8 @@ function fakeDb(tables: Record<string, Row[]>, options: { failCountOn?: boolean 
   const counts: string[] = [];
   let seq = 900;
   const client = {
+    // Khoá lô (migration 20261120190000): bản giả luôn cho xin / nhả được; ca bị từ chối có test riêng.
+    rpc: async () => ({ data: true, error: null }),
     from(table: string) {
       let rows = (tables[table] ?? []).slice();
       let mode: "read" | "insert" | "update" = "read";

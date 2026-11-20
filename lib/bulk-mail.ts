@@ -1,7 +1,10 @@
 import "server-only";
 
+import { randomUUID } from "crypto";
+
 import {
   BULK_AUDIENCE_LABELS,
+  BULK_RUN_LEASE_SECONDS,
   BULK_SEND_CHUNK,
   BULK_TIME_BUDGET_MS,
   FIXED_BULK_AUDIENCES,
@@ -1666,6 +1669,8 @@ export type BulkRunResult = {
   fillFailed?: number;
   /** Dừng vì nhiều lá lỗi nhà cung cấp liên tiếp (không phải 429): đừng đốt cả lô thành "lỗi". */
   providerTrouble?: boolean;
+  /** Lô đang được một lần chạy khác giữ (khoá lô): lần này không gửi lá nào. */
+  busy?: boolean;
   /**
    * Dừng vì cấu hình đang chặn gửi thư (lá "bị cấu hình chặn" đầu tiên). Cổng đóng là trạng thái
    * chung: mọi lá sau cũng bị chặn, nên đi tiếp chỉ đốt cả lô thành "bị chặn".
@@ -1747,6 +1752,87 @@ export async function runEmailBatch(input: {
       error: "Lô này không ghi lại tháng của nhóm mentee chưa có recap. Vui lòng mở lô mới."
     };
   }
+
+  // Khoá lô (migration 20261120190000): một lô chỉ có MỘT lần chạy tại một thời điểm. Hai lần chạy
+  // chồng nhau (hai tab, hai admin, "Gửi tiếp tới hết" ở tab này và "Gửi tiếp" ở tab kia) cùng đọc
+  // một danh sách còn lại và cùng gửi — mỗi người nhận hai lá. Không xin được khoá thì không gửi;
+  // không đọc được khoá cũng không gửi (fail-closed).
+  const token = randomUUID();
+  const claim = await client.rpc("email_batch_claim_run", {
+    p_batch_id: input.batch.id,
+    p_token: token,
+    p_seconds: BULK_RUN_LEASE_SECONDS
+  });
+  if (claim.error) {
+    log("runEmailBatch:claim", claim.error);
+    return { ok: false, sent: 0, failed: 0, skipped: 0, remaining: 0, problems: [], error: VI_ERROR };
+  }
+  if (claim.data !== true) {
+    return {
+      ok: false,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      remaining: 0,
+      problems: [],
+      busy: true,
+      error:
+        "Lô này đang có một lần gửi khác chạy (ở cửa sổ khác, do người khác bấm, hoặc lần trước chưa kịp nhả). Chờ khoảng 1–2 phút rồi bấm lại."
+    };
+  }
+
+  try {
+    return await runClaimedBatch(client, input, audience, now, startedAt);
+  } finally {
+    // Nhả khoá kể cả khi lần chạy hỏng giữa chừng. Nhả hỏng thì khoá tự hết hạn sau
+    // BULK_RUN_LEASE_SECONDS — lô chỉ bị chặn thêm chừng đó, không bị khoá mãi.
+    try {
+      const release = await client.rpc("email_batch_release_run", { p_batch_id: input.batch.id, p_token: token });
+      if (release.error) log("runEmailBatch:release", release.error);
+    } catch (error) {
+      log("runEmailBatch:release", error);
+    }
+  }
+}
+
+/** Số đếm hiện tại của lô, đọc thẳng từ database; đọc hỏng hoặc không thấy thì dùng bản đã có. */
+async function readBatchCounts(
+  client: any,
+  batch: EmailBatchRow
+): Promise<{ sentCount: number; failedCount: number; skippedCount: number }> {
+  const fallback = { sentCount: batch.sentCount, failedCount: batch.failedCount, skippedCount: batch.skippedCount };
+  try {
+    const { data, error } = await client
+      .from("email_batches")
+      .select("id, sent_count, failed_count, skipped_count")
+      .eq("id", batch.id)
+      .limit(1);
+    const row = Array.isArray(data) ? data.find((item: { id?: unknown }) => String(item?.id) === batch.id) : null;
+    if (error || !row) return fallback;
+    const read = (value: unknown, old: number) => (Number.isFinite(Number(value)) ? Number(value) : old);
+    return {
+      sentCount: read(row.sent_count, batch.sentCount),
+      failedCount: read(row.failed_count, batch.failedCount),
+      skippedCount: read(row.skipped_count, batch.skippedCount)
+    };
+  } catch (error) {
+    log("runEmailBatch:counts", error);
+    return fallback;
+  }
+}
+
+/** Phần thân của một lần chạy, sau khi đã giữ khoá lô. */
+async function runClaimedBatch(
+  client: any,
+  input: Parameters<typeof runEmailBatch>[0],
+  audience: BulkAudience,
+  now: () => number,
+  startedAt: number
+): Promise<BulkRunResult> {
+  // Số đếm của lô đọc lại SAU khi giữ khoá: `input.batch` được đọc trước lúc xin khoá, và lần chạy
+  // vừa xong ngay trước đó có thể đã cộng thêm — cộng vào bản cũ là xoá mất phần của lần đó. Đọc hỏng
+  // thì dùng bản cũ: số đếm chỉ để hiển thị, không quyết định ai nhận thư.
+  const base = await readBatchCounts(client, input.batch);
 
   // Lô `custom` (và lô "chưa có recap") đọc ĐÚNG danh sách đã chốt lúc mở lô, không dựng lại gì:
   // người không nằm trong bản xem trước thì không nhận thư, kể cả khi dữ liệu nguồn đã đổi.
@@ -1898,11 +1984,11 @@ export async function runEmailBatch(input: {
   const { error: updateError } = await client
     .from("email_batches")
     .update({
-      sent_count: input.batch.sentCount + sent,
+      sent_count: base.sentCount + sent,
       // Lá bị cấu hình chặn quay lại ở lần sau (alreadyHandled bỏ qua dòng "skipped"): cộng vào lô
       // là đếm cùng một người mỗi lần bấm. Số lá bị chặn của lần chạy vẫn nói trong câu báo.
-      skipped_count: input.batch.skippedCount,
-      failed_count: input.batch.failedCount + ledgeredFailed,
+      skipped_count: base.skippedCount,
+      failed_count: base.failedCount + ledgeredFailed,
       status: done ? "completed" : "running",
       completed_at: done ? new Date().toISOString() : null
     })
