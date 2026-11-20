@@ -333,6 +333,13 @@ export const BULK_SEND_CHUNK = 85;
 export const BULK_TIME_BUDGET_MS = 30_000;
 
 /**
+ * Thời hạn khoá lô của một lần chạy (giây). Dài hơn `maxDuration` 60 giây của trang Mail: lần chạy
+ * còn sống thì không bao giờ mất khoá giữa chừng; lần chạy bị cắt (Vercel giết tiến trình, không kịp
+ * nhả) thì lô tự mở lại sau chừng này, không bị khoá mãi.
+ */
+export const BULK_RUN_LEASE_SECONDS = 75;
+
+/**
  * Người nhận thuộc về dòng dữ liệu nào — để sổ thư nối lá thư về đúng chỗ.
  *
  * `external` (VAM00027): email nhập tay hoặc tải từ Excel, KHÔNG có hồ sơ nào trong VAM OS. Dòng

@@ -36,6 +36,8 @@ const updates: Array<Record<string, unknown>> = [];
  */
 function fakeClient(tables: Tables) {
   return {
+    // Khoá lô (migration 20261120190000): bản giả luôn cho xin / nhả được; ca bị từ chối có test riêng.
+    rpc: async () => ({ data: true, error: null }),
     from(table: string) {
       const chain: Record<string, unknown> = {};
       const passthrough = () => chain;
@@ -371,5 +373,79 @@ describe("lô to chạy liền mạch (85 thư / lần, 20/11/2026)", () => {
   it("mốc bắt đầu còn trong ngân sách thì gửi bình thường", async () => {
     const result = await run(population(5), { now: () => 100_000, startedAt: 100_000 - (BULK_TIME_BUDGET_MS - 1) });
     expect(result).toMatchObject({ sent: 5, remaining: 0 });
+  });
+});
+
+describe("khoá lô: một lô chỉ một lần chạy tại một thời điểm (migration 20261120190000)", () => {
+  type Rpc = (name: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>;
+  function withRpc(tables: Tables, rpc: Rpc) {
+    const calls: Array<[string, Record<string, unknown>]> = [];
+    const client = {
+      ...fakeClient(tables),
+      rpc: (name: string, args: Record<string, unknown>) => {
+        calls.push([name, args]);
+        return rpc(name, args);
+      }
+    };
+    vi.mocked(getSupabaseServiceRoleClient).mockReturnValue(client as never);
+    return calls;
+  }
+  const go = () =>
+    runEmailBatch({ batch: batch(), seasonCode: "UEHM-S12", subject: "Thông báo {{mua}}", body: "Chào {{ten_nguoi_nhan}}." });
+
+  it("xin khoá TRƯỚC khi gửi (đúng lô, token ngẫu nhiên, 75 giây), nhả đúng token đó khi xong", async () => {
+    const calls = withRpc(population(3), async () => ({ data: true, error: null }));
+    vi.mocked(sendTemplatedEmail).mockImplementation((async () => {
+      // Lúc lá đầu đi, khoá đã được xin và chưa nhả.
+      expect(calls.map((call) => call[0])).toEqual(["email_batch_claim_run"]);
+      return { ok: true, skipped: false };
+    }) as never);
+    const result = await go();
+    expect(result).toMatchObject({ ok: true, sent: 3 });
+    expect(calls.map((call) => call[0])).toEqual(["email_batch_claim_run", "email_batch_release_run"]);
+    const [claim, release] = calls.map((call) => call[1]);
+    expect(claim).toMatchObject({ p_batch_id: BATCH, p_seconds: 75 });
+    expect(String(claim.p_token)).toMatch(/^[0-9a-f-]{36}$/);
+    expect(release).toEqual({ p_batch_id: BATCH, p_token: claim.p_token });
+  });
+
+  it("lô đang được lần chạy khác giữ: không gửi lá nào, không ghi gì lên lô, báo busy, không nhả khoá của người khác", async () => {
+    const calls = withRpc(population(3), async () => ({ data: false, error: null }));
+    const result = await go();
+    expect(result).toMatchObject({ ok: false, sent: 0, busy: true });
+    expect(result.error).toContain("đang được gửi");
+    expect(sendTemplatedEmail).not.toHaveBeenCalled();
+    expect(updates).toEqual([]);
+    expect(calls.map((call) => call[0])).toEqual(["email_batch_claim_run"]);
+  });
+
+  it("không đọc được khoá: fail-closed, không gửi lá nào", async () => {
+    withRpc(population(3), async () => ({ data: null, error: { code: "42883", message: "function does not exist" } }));
+    const result = await go();
+    expect(result.ok).toBe(false);
+    expect(result.busy).toBeUndefined();
+    expect(sendTemplatedEmail).not.toHaveBeenCalled();
+  });
+
+  it("lần chạy hỏng giữa chừng (lỗi ném ra): khoá VẪN được nhả", async () => {
+    const calls = withRpc(population(3), async () => ({ data: true, error: null }));
+    vi.mocked(sendTemplatedEmail).mockRejectedValueOnce(new Error("boom"));
+    await expect(go()).rejects.toThrow("boom");
+    expect(calls.map((call) => call[0])).toEqual(["email_batch_claim_run", "email_batch_release_run"]);
+  });
+
+  it("nhả khoá hỏng: lần chạy vẫn báo đúng kết quả (khoá tự hết hạn)", async () => {
+    withRpc(population(2), async (name) =>
+      name === "email_batch_release_run" ? { data: null, error: { message: "boom" } } : { data: true, error: null }
+    );
+    const result = await go();
+    expect(result).toMatchObject({ ok: true, sent: 2, error: null });
+  });
+
+  it("lô sai hình dạng (không ghi nhóm nhận) bị từ chối trước, không xin khoá", async () => {
+    const calls = withRpc(population(2), async () => ({ data: true, error: null }));
+    const result = await runEmailBatch({ batch: batch({ audience: null }), seasonCode: "S", subject: "a", body: "b" });
+    expect(result.ok).toBe(false);
+    expect(calls).toEqual([]);
   });
 });

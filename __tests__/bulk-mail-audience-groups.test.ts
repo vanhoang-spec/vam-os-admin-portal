@@ -41,6 +41,8 @@ type Row = Record<string, unknown>;
 function fakeDb(tables: Record<string, Row[]>, failOn: string[] = []) {
   const reads: string[] = [];
   const client = {
+    // Khoá lô (migration 20261120190000): bản giả luôn cho xin / nhả được; ca bị từ chối có test riêng.
+    rpc: async () => ({ data: true, error: null }),
     from(table: string) {
       let rows = (tables[table] ?? []).slice();
       let limitN: number | null = null;

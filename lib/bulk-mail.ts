@@ -1,7 +1,10 @@
 import "server-only";
 
+import { randomUUID } from "crypto";
+
 import {
   BULK_AUDIENCE_LABELS,
+  BULK_RUN_LEASE_SECONDS,
   BULK_SEND_CHUNK,
   BULK_TIME_BUDGET_MS,
   FIXED_BULK_AUDIENCES,
@@ -1666,6 +1669,8 @@ export type BulkRunResult = {
   fillFailed?: number;
   /** Dừng vì nhiều lá lỗi nhà cung cấp liên tiếp (không phải 429): đừng đốt cả lô thành "lỗi". */
   providerTrouble?: boolean;
+  /** Lô đang được một lần chạy khác giữ (khoá lô): lần này không gửi lá nào. */
+  busy?: boolean;
   /**
    * Dừng vì cấu hình đang chặn gửi thư (lá "bị cấu hình chặn" đầu tiên). Cổng đóng là trạng thái
    * chung: mọi lá sau cũng bị chặn, nên đi tiếp chỉ đốt cả lô thành "bị chặn".
@@ -1748,6 +1753,56 @@ export async function runEmailBatch(input: {
     };
   }
 
+  // Khoá lô (migration 20261120190000): một lô chỉ có MỘT lần chạy tại một thời điểm. Hai lần chạy
+  // chồng nhau (hai tab, hai admin, "Gửi tiếp tới hết" ở tab này và "Gửi tiếp" ở tab kia) cùng đọc
+  // một danh sách còn lại và cùng gửi — mỗi người nhận hai lá. Không xin được khoá thì không gửi;
+  // không đọc được khoá cũng không gửi (fail-closed).
+  const token = randomUUID();
+  const claim = await client.rpc("email_batch_claim_run", {
+    p_batch_id: input.batch.id,
+    p_token: token,
+    p_seconds: BULK_RUN_LEASE_SECONDS
+  });
+  if (claim.error) {
+    log("runEmailBatch:claim", claim.error);
+    return { ok: false, sent: 0, failed: 0, skipped: 0, remaining: 0, problems: [], error: VI_ERROR };
+  }
+  if (claim.data !== true) {
+    return {
+      ok: false,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      remaining: 0,
+      problems: [],
+      busy: true,
+      error:
+        "Lô này đang được gửi ở một cửa sổ khác (hoặc bởi người khác). Chờ lần đó xong — tối đa khoảng một phút — rồi bấm lại."
+    };
+  }
+
+  try {
+    return await runClaimedBatch(client, input, audience, now, startedAt);
+  } finally {
+    // Nhả khoá kể cả khi lần chạy hỏng giữa chừng. Nhả hỏng thì khoá tự hết hạn sau
+    // BULK_RUN_LEASE_SECONDS — lô chỉ bị chặn thêm chừng đó, không bị khoá mãi.
+    try {
+      const release = await client.rpc("email_batch_release_run", { p_batch_id: input.batch.id, p_token: token });
+      if (release.error) log("runEmailBatch:release", release.error);
+    } catch (error) {
+      log("runEmailBatch:release", error);
+    }
+  }
+}
+
+/** Phần thân của một lần chạy, sau khi đã giữ khoá lô. */
+async function runClaimedBatch(
+  client: any,
+  input: Parameters<typeof runEmailBatch>[0],
+  audience: BulkAudience,
+  now: () => number,
+  startedAt: number
+): Promise<BulkRunResult> {
   // Lô `custom` (và lô "chưa có recap") đọc ĐÚNG danh sách đã chốt lúc mở lô, không dựng lại gì:
   // người không nằm trong bản xem trước thì không nhận thư, kể cả khi dữ liệu nguồn đã đổi.
   const recipients =
