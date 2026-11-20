@@ -83,7 +83,7 @@ export default async function MailPage() {
     maySend ? listEmailBatches(season.id) : Promise.resolve({ rows: [], error: null }),
     maySend
       ? countBulkRecipients(season.id)
-      : Promise.resolve({ counts: {}, events: [], error: null })
+      : Promise.resolve({ counts: {}, events: [], recapMonths: [], error: null })
   ]);
 
   const templates: MailTemplateSummary[] = listing.rows.map((row) => ({
@@ -155,6 +155,7 @@ export default async function MailPage() {
             .map((row) => ({ id: row.id, name: row.name, subject: row.subject }))}
           counts={recipientCounts.counts}
           eventOptions={recipientCounts.events}
+          recapMonthOptions={recipientCounts.recapMonths}
           batches={batches.rows.map((row) => ({
             id: row.id,
             note: row.note,

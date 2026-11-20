@@ -9,6 +9,7 @@
 
 import { normalizeEmailAddress } from "@/lib/email-core";
 import { TEMPLATE_SPECS, type TemplateKind } from "@/lib/email-templates-core";
+import { isRecapMonth } from "@/lib/bulk-mail-recap-core";
 
 /**
  * Các nhóm nhận thư.
@@ -34,6 +35,7 @@ export const BULK_AUDIENCES = [
   "mentee_cv_rejected",
   "mentee_invite_withdrawn",
   "mentee_interview_rejected",
+  "mentee_no_recap_month",
   "event",
   "custom"
 ] as const;
@@ -65,6 +67,7 @@ export const BULK_AUDIENCE_LABELS: Record<BulkAudience, string> = {
   mentee_cv_rejected: "Mentee rớt vòng hồ sơ (CV)",
   mentee_invite_withdrawn: "Mentee rớt CV sau khi đã nhận thư mời phỏng vấn",
   mentee_interview_rejected: "Mentee không trúng tuyển vòng phỏng vấn (rớt, không phỏng vấn, không chọn ca)",
+  mentee_no_recap_month: "Mentee chưa có recap trong tháng",
   event: "Người đã đăng ký một sự kiện",
   custom: "Danh sách tùy chỉnh"
 };
@@ -83,6 +86,10 @@ export const BULK_AUDIENCE_HINTS: Record<FixedBulkAudience, string> = {
   mentee_interview_rejected:
     "Mentee rớt phỏng vấn; đã check-in, đã phân bàn hoặc đã chọn ca mà không phỏng vấn; và người đã nhận thư mời mà không chọn ca. Không gồm người đã đậu, đang chờ BTC xem xét thêm, đã huỷ chỗ mà không chọn lại, đang tham gia mùa này, là BTC, người đã nhận thư rớt ở lô trước, và 5 bạn BTC giữ lại (24/10/2026)."
 };
+
+/** Câu nói rõ nhóm "Mentee chưa có recap trong tháng" là ai (nhóm có tham số tháng, nên không nằm trong bảng trên). */
+export const NO_RECAP_AUDIENCE_HINT =
+  "Mentee có cặp active vào ngày cuối tháng, chưa có recap hợp lệ (đã nộp hoặc cần duyệt) đăng trong tháng. Mỗi thư CC mentor của cặp active mới nhất. Danh sách chốt vào lô lúc bấm gửi.";
 
 /**
  * Thư "không trúng tuyển vòng phỏng vấn" mentee mùa 12 (BTC 24/10/2026) — đơn nào vào nhóm nào.
@@ -229,6 +236,8 @@ export type AudienceChoice = {
   eventId: string | null;
   /** Chỉ có nghĩa với nhóm `event`: gồm cả các buổi khác cùng chuỗi. */
   coversSeries: boolean;
+  /** Chỉ có với nhóm `mentee_no_recap_month`: tháng `YYYY-MM`. */
+  month?: string;
 };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -247,6 +256,7 @@ export function resolveAudienceChoice(input: {
   audience: unknown;
   eventId?: unknown;
   coversSeries?: unknown;
+  month?: unknown;
 }): { ok: true; choice: AudienceChoice } | { ok: false; message: string } {
   const audience = String(input.audience ?? "").trim();
   if (!isBulkAudience(audience)) return { ok: false, message: "Chưa chọn đối tượng nhận thư." };
@@ -254,6 +264,16 @@ export function resolveAudienceChoice(input: {
   // riêng (startCustomBulkSendAction), nơi danh sách được kiểm lại và chốt vào lô.
   if (audience === "custom") {
     return { ok: false, message: "Danh sách tùy chỉnh phải xem trước rồi gửi bằng nút của nó." };
+  }
+
+  // Nhóm "chưa có recap" mà thiếu tháng thì từ chối, không đoán "tháng này": đoán sai là gửi
+  // thư nhắc cho người đã đăng bài của tháng họ đang nghĩ tới.
+  if (audience === "mentee_no_recap_month") {
+    const month = String(input.month ?? "").trim();
+    if (!isRecapMonth(month)) {
+      return { ok: false, message: "Chưa chọn tháng cho nhóm mentee chưa có recap." };
+    }
+    return { ok: true, choice: { audience, eventId: null, coversSeries: false, month } };
   }
 
   if (audience !== "event") {
@@ -352,6 +372,13 @@ export type BulkRecipient = {
   memberCode?: string | null;
   /** `people.gender` nguyên văn, để suy ra ô {{xung_ho}}. */
   gender?: string | null;
+  /**
+   * Địa chỉ CC của RIÊNG thư này (nhóm "Mentee chưa có recap": mentor của cặp). Đã chuẩn hoá;
+   * chốt vào lô cùng người nhận, nên mọi lần "Gửi tiếp" mang đúng CC đã thấy lúc xác nhận.
+   */
+  ccEmails?: string[];
+  /** Thư vẫn đi nhưng thiếu CC lẽ ra phải có — nói ra trước khi bấm gửi, không lặng lẽ bỏ. */
+  ccWarning?: string;
 };
 
 /**
@@ -449,6 +476,10 @@ export function partitionRecipients(rows: BulkRecipient[]): RecipientPartition {
     if (seen.has(email)) continue;
 
     seen.add(email);
+    // CC trùng chính người nhận thì bỏ: cùng một hộp thư nhận hai bản là thứ người ta hỏi lại.
+    const ccEmails = Array.from(
+      new Set((row.ccEmails ?? []).map((cc) => normalizeEmailAddress(cc)).filter((cc): cc is string => Boolean(cc) && cc !== email))
+    );
     sendable.push({
       personId: row.personId,
       fullName,
@@ -456,7 +487,9 @@ export function partitionRecipients(rows: BulkRecipient[]): RecipientPartition {
       role: row.role,
       ...(row.relationTable ? { relationTable: row.relationTable } : {}),
       ...(row.memberCode ? { memberCode: row.memberCode } : {}),
-      ...(row.gender ? { gender: row.gender } : {})
+      ...(row.gender ? { gender: row.gender } : {}),
+      ...(ccEmails.length ? { ccEmails } : {}),
+      ...(row.ccWarning ? { ccWarning: row.ccWarning } : {})
     });
   }
 

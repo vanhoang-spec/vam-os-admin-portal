@@ -89,7 +89,10 @@ afterAll(async () => {
 
 describe("nhóm nhận thư", () => {
   it("mọi nhóm TypeScript khai báo — cả nhóm cũ lẫn custom — đều mở được lô", async () => {
-    for (const audience of BULK_AUDIENCES) {
+    // Nhóm thêm SAU migration này (20261120150000: mentee_no_recap_month) có test migration riêng
+    // (nhom-mentee-chua-recap-migration.test.ts), chạy sau đủ chuỗi migration.
+    const LATER = new Set(["mentee_no_recap_month"]);
+    for (const audience of BULK_AUDIENCES.filter((value) => !LATER.has(value))) {
       const id = await batch(audience);
       expect(id, audience).toBeTruthy();
     }

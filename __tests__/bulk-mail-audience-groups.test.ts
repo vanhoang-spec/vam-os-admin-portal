@@ -447,6 +447,9 @@ describe("9. màn hình gửi", () => {
   });
 
   it("nhóm sự kiện mà không còn sự kiện nào thì rơi về nhóm có thật, không để ô chọn và form lệch nhau", () => {
-    expect(panel).toContain('audienceChoice === "event" && !eventOptions.length ? "mentee" : audienceChoice');
+    // Nhóm "chưa có recap" (có tham số tháng) rơi về cùng cách khi không còn tháng nào chọn được.
+    expect(panel).toContain('(audienceChoice === "event" && !eventOptions.length) ||');
+    expect(panel).toContain('(audienceChoice === "mentee_no_recap_month" && !recapMonthOptions.length)');
+    expect(panel).toMatch(/\? "mentee"\s*: audienceChoice;/);
   });
 });

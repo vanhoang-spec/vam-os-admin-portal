@@ -10,6 +10,7 @@ import {
   resolveAudienceChoice
 } from "@/lib/bulk-mail-core";
 import { readCustomListSpec, recipientKey, selectCustomRecipients } from "@/lib/bulk-mail-custom-core";
+import { RECAP_AUDIENCE, countCcMentors } from "@/lib/bulk-mail-recap-core";
 import {
   EXTERNAL_CONFIRM_FIELD,
   EXTERNAL_FILE_FIELD,
@@ -28,6 +29,7 @@ import {
   buildCustomRecipientUniverse,
   createCustomEmailBatch,
   createEmailBatch,
+  createNoRecapEmailBatch,
   listBulkRecipients,
   listEmailBatches,
   runEmailBatch,
@@ -271,10 +273,11 @@ export async function startBulkSendAction(
     const resolved = resolveAudienceChoice({
       audience: formData.get("audience"),
       eventId: formData.get("event_id"),
-      coversSeries: formData.get("covers_series")
+      coversSeries: formData.get("covers_series"),
+      month: formData.get("audience_month")
     });
     if (!resolved.ok) return fail(resolved.message);
-    const { audience, eventId, coversSeries } = resolved.choice;
+    const { audience, eventId, coversSeries, month } = resolved.choice;
 
     const template = await approvedTemplate(templateId, auth.seasonId);
     if (!template.ok) return template.state;
@@ -285,6 +288,8 @@ export async function startBulkSendAction(
     const recipients = await listBulkRecipients(
       audience === "event"
         ? { seasonId: auth.seasonId, audience, eventId, coversSeries }
+        : audience === RECAP_AUDIENCE
+        ? { seasonId: auth.seasonId, audience, month: month ?? null }
         : { seasonId: auth.seasonId, audience }
     );
     if (recipients.error) return fail(recipients.error);
@@ -297,16 +302,29 @@ export async function startBulkSendAction(
     const files = await attachmentsFromForm(formData, auth);
     if (!files.ok) return files.state;
 
-    const created = await createEmailBatch({
-      seasonId: auth.seasonId,
-      kind: row.kind,
-      templateId: row.id,
-      audience,
-      ...(audience === "event" ? { audienceEventId: eventId, audienceCoversSeries: coversSeries } : {}),
-      requestedCount: expected,
-      note: `${recipients.label ?? BULK_AUDIENCE_LABELS[audience]} · ${row.name}`,
-      actorAdminUserId: auth.adminUserId
-    });
+    const note = `${recipients.label ?? BULK_AUDIENCE_LABELS[audience]} · ${row.name}`;
+    // Nhóm "chưa có recap" chốt danh sách + CC từng thư vào lô ĐÚNG như vừa đếm và xác nhận.
+    const created =
+      audience === RECAP_AUDIENCE
+        ? await createNoRecapEmailBatch({
+            seasonId: auth.seasonId,
+            kind: row.kind,
+            templateId: row.id,
+            month: month ?? "",
+            recipients: recipients.partition.sendable,
+            note,
+            actorAdminUserId: auth.adminUserId
+          })
+        : await createEmailBatch({
+            seasonId: auth.seasonId,
+            kind: row.kind,
+            templateId: row.id,
+            audience,
+            ...(audience === "event" ? { audienceEventId: eventId, audienceCoversSeries: coversSeries } : {}),
+            requestedCount: expected,
+            note,
+            actorAdminUserId: auth.adminUserId
+          });
     if (created.error || !created.batch) return fail(created.error ?? "Không mở được lô gửi.");
 
     const bound = await ganTepVaoLo({
@@ -336,16 +354,30 @@ export async function startBulkSendAction(
     // Người thiếu địa chỉ hoặc thiếu tên chưa từng nằm trong lô. Nói ra ở đây,
     // vì "đã gửi cho tất cả" mà thật ra là thiếu vài người là câu trả lời sai
     // cho câu hỏi quan trọng nhất sau một lượt gửi.
+    // Thư đi mà thiếu CC (mentor chưa có email) cũng nói ra: mentee vẫn nhận, nhưng mentor không biết.
+    const ccMissing = recipients.partition.sendable.filter((row_) => row_.ccWarning);
     const problems = [
       ...run.problems,
       ...recipients.partition.unreachable
         .slice(0, 10)
         .map((row_) => `${row_.fullName}: ${row_.reason}`)
     ];
+    // Không đưa vào `problems`: danh sách đó là "người chưa nhận được thư", còn mentee này VẪN nhận.
+    const ccNote =
+      audience === RECAP_AUDIENCE
+        ? ` Lô CC ${countCcMentors(recipients.partition.sendable)} mentor.${
+            ccMissing.length
+              ? ` Cảnh báo: ${ccMissing.length} thư gửi không CC (${ccMissing
+                  .slice(0, 5)
+                  .map((row_) => `${row_.fullName}: ${row_.ccWarning}`)
+                  .join("; ")}${ccMissing.length > 5 ? "; …" : ""}).`
+              : ""
+          }`
+        : "";
 
     return {
       ok: true,
-      message: withAttachmentNote(describeRunResult(run), files.files.length),
+      message: withAttachmentNote(describeRunResult(run) + ccNote, files.files.length),
       batchId: created.batch.id,
       problems
     };
