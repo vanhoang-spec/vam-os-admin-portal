@@ -71,12 +71,14 @@ function runProgress(run: {
   rateLimited?: boolean;
   fillFailed?: number;
   providerTrouble?: boolean;
+  configBlocked?: boolean;
 }) {
   return {
     remaining: run.remaining,
     processed: Math.max(0, run.sent + run.skipped + run.failed - (run.fillFailed ?? 0)),
     ...(run.rateLimited ? { rateLimited: true } : {}),
-    ...(run.providerTrouble ? { providerTrouble: true } : {})
+    ...(run.providerTrouble ? { providerTrouble: true } : {}),
+    ...(run.configBlocked ? { configBlocked: true } : {})
   };
 }
 

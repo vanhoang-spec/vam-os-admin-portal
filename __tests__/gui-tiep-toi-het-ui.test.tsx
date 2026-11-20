@@ -43,6 +43,9 @@ function mount() {
 }
 const calls = () => vi.mocked(continueBulkSendAction).mock.calls;
 const endMessage = () => String(onEnd.mock.calls.at(-1)?.[0].message ?? "");
+/** onEnd được gọi lúc bắt đầu (xoá câu cũ, message null) và lúc dừng (có câu báo). */
+const endedCalls = () => onEnd.mock.calls.filter((call) => call[0].message);
+const waitEnded = () => waitFor(() => expect(endedCalls().length).toBeGreaterThan(0));
 const clickAuto = () => act(() => screen.getByText("Gửi tiếp tới hết").click());
 
 describe("Gửi tiếp tới hết", () => {
@@ -53,13 +56,16 @@ describe("Gửi tiếp tới hết", () => {
       .mockResolvedValueOnce(ok(0, 254) as never);
     mount();
     clickAuto();
-    await waitFor(() => expect(onEnd).toHaveBeenCalledTimes(1));
+    await waitEnded();
+    expect(endedCalls()).toHaveLength(1);
+    // Lúc bắt đầu, câu báo của lượt trước bị xoá.
+    expect(onEnd.mock.calls[0][0].message).toBeNull();
     expect(calls()).toHaveLength(3);
     for (const call of calls()) {
       expect((call[1] as FormData).get("batch_id")).toBe(BATCH);
       expect((call[1] as FormData).get("tu_dong")).toBe("1");
     }
-    expect(onEnd.mock.calls[0][0].ok).toBe(true);
+    expect(endedCalls()[0][0].ok).toBe(true);
     expect(endMessage()).toContain("Lô đã gửi xong.");
     expect(endMessage()).toContain("424 thư");
     expect(refresh).toHaveBeenCalledTimes(1);
@@ -72,21 +78,22 @@ describe("Gửi tiếp tới hết", () => {
     } as never);
     mount();
     clickAuto();
-    await waitFor(() => expect(onEnd).toHaveBeenCalled());
+    await waitEnded();
     expect(endMessage()).toContain("báo lỗi");
     expect(endMessage()).toContain("Lô này đã kết thúc.");
-    expect(onEnd.mock.calls[0][0].ok).toBe(false);
+    expect(endedCalls()[0][0].ok).toBe(false);
     expect(calls()).toHaveLength(1);
   });
 
   it.each([
     ["429", { rateLimited: true }, "chạm giới hạn"],
-    ["nhà cung cấp lỗi liên tiếp", { providerTrouble: true }, "lỗi liên tiếp"]
+    ["nhà cung cấp lỗi liên tiếp", { providerTrouble: true }, "lỗi liên tiếp"],
+    ["cấu hình chặn gửi thư", { configBlocked: true }, "cấu hình đang chặn"]
   ])("%s: dừng, không bấm thêm", async (_label, extra, words) => {
     vi.mocked(continueBulkSendAction).mockResolvedValueOnce(ok(300, 5, extra) as never);
     mount();
     clickAuto();
-    await waitFor(() => expect(onEnd).toHaveBeenCalled());
+    await waitEnded();
     expect(endMessage()).toContain(words);
     expect(calls()).toHaveLength(1);
   });
@@ -95,7 +102,7 @@ describe("Gửi tiếp tới hết", () => {
     vi.mocked(continueBulkSendAction).mockResolvedValue(ok(50, 0) as never);
     mount();
     clickAuto();
-    await waitFor(() => expect(onEnd).toHaveBeenCalled());
+    await waitEnded();
     expect(endMessage()).toContain("không gửi thêm được");
     expect(calls()).toHaveLength(1);
   });
@@ -105,7 +112,7 @@ describe("Gửi tiếp tới hết", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     mount();
     clickAuto();
-    await waitFor(() => expect(onEnd).toHaveBeenCalled());
+    await waitEnded();
     expect(endMessage()).toContain("vẫn nằm trong lô");
     expect(calls()).toHaveLength(1);
   });
@@ -130,10 +137,21 @@ describe("Gửi tiếp tới hết", () => {
 
     act(() => screen.getByText("Dừng").click());
     await act(async () => release(ok(200, 85)));
-    await waitFor(() => expect(onEnd).toHaveBeenCalled());
+    await waitEnded();
     expect(endMessage()).toContain("Đã dừng theo yêu cầu");
     expect(calls()).toHaveLength(1);
     addListener.mockRestore();
+  });
+
+  it("câu báo cuối gom lỗi của MỌI vòng, không chỉ vòng cuối", async () => {
+    vi.mocked(continueBulkSendAction)
+      .mockResolvedValueOnce(ok(100, 85, { problems: ["An: hộp thư sai"] }) as never)
+      .mockResolvedValueOnce(ok(15, 85, { problems: ["Bình: hộp thư sai"] }) as never)
+      .mockResolvedValueOnce(ok(0, 15) as never);
+    mount();
+    clickAuto();
+    await waitEnded();
+    expect(endedCalls()[0][0].problems).toEqual(["An: hộp thư sai", "Bình: hộp thư sai"]);
   });
 
   it("rời màn hình giữa chừng (đổi trang trong app): vòng dừng sau lần đang dở, không chạy ngầm", async () => {
@@ -146,7 +164,7 @@ describe("Gửi tiếp tới hết", () => {
     await waitFor(() => expect(calls()).toHaveLength(1));
     view.unmount();
     await act(async () => release(ok(200, 85)));
-    await waitFor(() => expect(onEnd).toHaveBeenCalled());
+    await waitEnded();
     expect(calls()).toHaveLength(1);
   });
 });

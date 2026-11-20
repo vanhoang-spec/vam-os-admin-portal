@@ -223,17 +223,18 @@ describe("một bức thư hỏng không dừng cả lô", () => {
     expect(result.problems[0]).toContain("địa chỉ bị chặn");
   });
 
-  it("đếm riêng thư bị cấu hình chặn, không gọi đó là lỗi", async () => {
+  it("đếm riêng thư bị cấu hình chặn, không gọi đó là lỗi — và DỪNG ở lá bị chặn đầu tiên", async () => {
+    // Cổng đóng là trạng thái chung: đi tiếp chỉ đốt cả lô thành "bị chặn" (rà 20/11/2026).
     vi.mocked(sendTemplatedEmail).mockResolvedValue({
       ok: true,
       skipped: true,
       reason: "Chưa bật gửi thư"
     } as never);
 
-    const result = await run(population(2));
-    expect(result.skipped).toBe(2);
-    expect(result.failed).toBe(0);
-    expect(result.sent).toBe(0);
+    const result = await run(population(3));
+    expect(result).toMatchObject({ skipped: 1, failed: 0, sent: 0, remaining: 2, configBlocked: true });
+    expect(sendTemplatedEmail).toHaveBeenCalledTimes(1);
+    expect(updates.at(-1)).toMatchObject({ status: "running", skipped_count: 1 });
   });
 
   it("không gửi bức thư còn thiếu dữ liệu, và không ghi sổ cho nó", async () => {
@@ -317,7 +318,14 @@ describe("lô to chạy liền mạch (85 thư / lần, 20/11/2026)", () => {
 
   it("lá lỗi điền ô được đếm riêng (fillFailed) — không ghi sổ, lần sau gặp lại", async () => {
     // Ô không có trong danh mục của loại thư → renderTemplate chặn cả 3 lá, không lá nào ghi sổ.
-    const result = await run(population(3), { body: "Chào {{ten_nguoi_nhan}}, {{o_khong_co}}." });
+    // Họ CHƯA nhận: vẫn còn trong số còn lại, lô không được đánh dấu xong, và không cộng vào số lỗi
+    // của lô (lần sau họ quay lại, cộng mãi là phồng).
+    const result = await run(population(3), {
+      body: "Chào {{ten_nguoi_nhan}}, {{o_khong_co}}.",
+      batch: batch({ failedCount: 2 })
+    });
+    expect(result.remaining).toBe(3);
+    expect(updates.at(-1)).toMatchObject({ status: "running", failed_count: 2 });
     expect(result).toMatchObject({ sent: 0, failed: 3, fillFailed: 3 });
     expect(sendTemplatedEmail).not.toHaveBeenCalled();
   });

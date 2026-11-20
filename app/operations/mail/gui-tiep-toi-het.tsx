@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+
+/** Câu báo cuối giữ tối đa bấy nhiêu dòng lỗi của cả lượt (mọi vòng), phần dư gộp một dòng. */
+const PROBLEMS_KEPT = 50;
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
@@ -87,9 +90,15 @@ export function GuiTiepControls({
     stopRequested.current = false;
     setRunning(true);
     setLast(null);
+    // Xoá câu báo của lượt trước: đang chạy lượt mới mà vẫn hiện "Lô đã gửi xong" của lượt cũ là sai.
+    onEnd?.(initialBulkMailActionState);
     setProcessedTotal(0);
 
     let total = 0;
+    // Lỗi của MỌI vòng, không chỉ vòng cuối: vòng giữa có người lỗi mà vòng cuối sạch thì câu báo
+    // cuối vẫn phải kể họ ra (bấm tay từng lần thì mỗi lần đều hiện).
+    const problems: string[] = [];
+    let moreProblems = 0;
     let endState: BulkMailActionState | null = null;
     let endStep: Exclude<AutoContinueStep, "continue"> = "error";
     try {
@@ -99,6 +108,10 @@ export function GuiTiepControls({
         formData.set("tu_dong", "1");
         const result = await continueBulkSendAction(initialBulkMailActionState, formData);
         total += result.processed ?? 0;
+        for (const problem of result.problems ?? []) {
+          if (problems.length < PROBLEMS_KEPT) problems.push(problem);
+          else moreProblems += 1;
+        }
         setProcessedTotal(total);
         setLast(result);
 
@@ -108,6 +121,7 @@ export function GuiTiepControls({
           processed: result.processed,
           rateLimited: result.rateLimited,
           providerTrouble: result.providerTrouble,
+          configBlocked: result.configBlocked,
           stopRequested: stopRequested.current,
           round
         });
@@ -130,7 +144,7 @@ export function GuiTiepControls({
           endState?.message ? ` ${endState.message}` : ""
         }`,
         batchId,
-        problems: endState?.problems ?? []
+        problems: moreProblems ? [...problems, `… và ${moreProblems} dòng khác (xem Nhật ký gửi)`] : problems
       });
       // Các vòng không vẽ lại trang (tu_dong=1): làm mới một lần để số trên lô và danh sách lô đúng.
       router.refresh();

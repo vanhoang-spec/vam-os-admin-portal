@@ -300,9 +300,18 @@ describe("Gửi tiếp tới hết: khi nào bấm tiếp", () => {
     expect(autoContinueStep({ ...base, remaining: undefined })).toBe("error");
   });
 
-  it("lỗi và 429 thắng cả khi còn người", () => {
+  it("lỗi thắng mọi cờ; hết người thì xong dù có cờ dừng", () => {
     expect(autoContinueStep({ ...base, ok: false, rateLimited: true })).toBe("error");
-    expect(autoContinueStep({ ...base, rateLimited: true, remaining: 0 })).toBe("rate_limited");
+    expect(autoContinueStep({ ...base, rateLimited: true, remaining: 0 })).toBe("done");
+    expect(autoContinueStep({ ...base, configBlocked: true })).toBe("config_blocked");
+    expect(autoContinueStep({ ...base, configBlocked: true, processed: 0 })).toBe("config_blocked");
+  });
+
+  it("câu báo dừng giữa chừng chỉ khi lô còn người", () => {
+    const base_ = { sent: 3, failed: 5, skipped: 0 };
+    expect(describeRunResult({ ...base_, remaining: 10, providerTrouble: true })).toContain("lỗi liên tiếp");
+    expect(describeRunResult({ ...base_, remaining: 0, providerTrouble: true })).toContain("đã gửi xong");
+    expect(describeRunResult({ sent: 0, failed: 0, skipped: 1, remaining: 9, configBlocked: true })).toContain("chặn gửi thư");
   });
 
   it("câu báo nói 429 rõ ràng", () => {

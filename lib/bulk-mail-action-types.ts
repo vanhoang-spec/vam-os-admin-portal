@@ -20,6 +20,8 @@ export type BulkMailActionState = {
   rateLimited?: boolean;
   /** Lần chạy dừng vì nhiều lá lỗi nhà cung cấp liên tiếp: không tự gửi tiếp. */
   providerTrouble?: boolean;
+  /** Lần chạy dừng vì cấu hình đang chặn gửi thư: không tự gửi tiếp. */
+  configBlocked?: boolean;
 };
 
 export const initialBulkMailActionState: BulkMailActionState = {

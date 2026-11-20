@@ -1665,6 +1665,11 @@ export type BulkRunResult = {
   fillFailed?: number;
   /** Dừng vì nhiều lá lỗi nhà cung cấp liên tiếp (không phải 429): đừng đốt cả lô thành "lỗi". */
   providerTrouble?: boolean;
+  /**
+   * Dừng vì cấu hình đang chặn gửi thư (lá "bị cấu hình chặn" đầu tiên). Cổng đóng là trạng thái
+   * chung: mọi lá sau cũng bị chặn, nên đi tiếp chỉ đốt cả lô thành "bị chặn".
+   */
+  configBlocked?: boolean;
 };
 
 /**
@@ -1807,6 +1812,7 @@ export async function runEmailBatch(input: {
   let fillFailed = 0;
   let providerStreak = 0;
   let providerTrouble = false;
+  let configBlocked = false;
   const problems: string[] = [];
 
   // Lọc lại HTML đã lưu MỘT lần cho cả lượt chạy, trước khi điền ô: cột trong database là thứ một
@@ -1860,8 +1866,11 @@ export async function runEmailBatch(input: {
       rateLimited = true;
       break;
     }
-    if (result.skipped) skipped += 1;
-    else if (result.ok) {
+    if (result.skipped) {
+      skipped += 1;
+      configBlocked = true;
+      break;
+    } else if (result.ok) {
       sent += 1;
       providerStreak = 0;
     } else {
@@ -1875,7 +1884,11 @@ export async function runEmailBatch(input: {
     }
   }
 
-  const remaining = Math.max(0, pending.length - (sent + failed + skipped));
+  // Lá lỗi điền ô KHÔNG ghi sổ nên vẫn còn phải gửi: không trừ khỏi số còn lại (lô không được
+  // đánh dấu xong khi họ chưa nhận), và không cộng vào failed_count của lô (họ quay lại mỗi lần chạy,
+  // cộng mãi là số lỗi phồng lên). Đúng ý "sửa dữ liệu của họ rồi chạy tiếp là xong".
+  const ledgeredFailed = failed - fillFailed;
+  const remaining = Math.max(0, pending.length - (sent + ledgeredFailed + skipped));
   const done = remaining === 0;
 
   const { error: updateError } = await client
@@ -1883,7 +1896,7 @@ export async function runEmailBatch(input: {
     .update({
       sent_count: input.batch.sentCount + sent,
       skipped_count: input.batch.skippedCount + skipped,
-      failed_count: input.batch.failedCount + failed,
+      failed_count: input.batch.failedCount + ledgeredFailed,
       status: done ? "completed" : "running",
       completed_at: done ? new Date().toISOString() : null
     })
@@ -1905,7 +1918,8 @@ export async function runEmailBatch(input: {
     error: null,
     ...(rateLimited ? { rateLimited } : {}),
     ...(fillFailed ? { fillFailed } : {}),
-    ...(providerTrouble ? { providerTrouble } : {})
+    ...(providerTrouble ? { providerTrouble } : {}),
+    ...(configBlocked ? { configBlocked } : {})
   };
 }
 

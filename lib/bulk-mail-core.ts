@@ -564,16 +564,21 @@ export function describeRunResult(input: {
   remaining: number;
   rateLimited?: boolean;
   providerTrouble?: boolean;
+  configBlocked?: boolean;
 }): string {
   const parts = [`Đã gửi ${input.sent} thư`];
   if (input.skipped) parts.push(`${input.skipped} thư bị cấu hình chặn`);
   if (input.failed) parts.push(`${input.failed} thư lỗi`);
 
   const head = parts.join(", ") + ".";
-  if (input.rateLimited) {
+  // Ba câu dừng giữa chừng chỉ có nghĩa khi lô còn người; hết người rồi thì nói "đã gửi xong" như thường.
+  if (input.configBlocked && input.remaining > 0) {
+    return `${head} Cấu hình đang chặn gửi thư nên đã dừng. Còn ${input.remaining} người chưa nhận — bật lại gửi thư rồi bấm “Gửi tiếp”.`;
+  }
+  if (input.rateLimited && input.remaining > 0) {
     return `${head} Nhà cung cấp email báo chạm giới hạn gửi nên đã dừng. Còn ${input.remaining} người chưa nhận — chờ ít phút (nếu là hạn mức trong ngày thì chờ sang ngày) rồi bấm “Gửi tiếp”.`;
   }
-  if (input.providerTrouble) {
+  if (input.providerTrouble && input.remaining > 0) {
     return `${head} Nhiều thư lỗi liên tiếp nên đã dừng để không ghi lỗi cả lô. Còn ${input.remaining} người chưa nhận — kiểm Nhật ký gửi rồi bấm “Gửi tiếp”.`;
   }
   if (input.remaining > 0) {
@@ -592,6 +597,7 @@ export type AutoContinueStep =
   | "error"
   | "rate_limited"
   | "provider_trouble"
+  | "config_blocked"
   | "stuck"
   | "round_limit";
 
@@ -609,14 +615,16 @@ export function autoContinueStep(input: {
   processed?: number;
   rateLimited?: boolean;
   providerTrouble?: boolean;
+  configBlocked?: boolean;
   stopRequested: boolean;
   round: number;
 }): AutoContinueStep {
   if (!input.ok) return "error";
-  if (input.rateLimited) return "rate_limited";
-  if (input.providerTrouble) return "provider_trouble";
   if (typeof input.remaining !== "number" || !Number.isFinite(input.remaining)) return "error";
   if (input.remaining <= 0) return "done";
+  if (input.configBlocked) return "config_blocked";
+  if (input.rateLimited) return "rate_limited";
+  if (input.providerTrouble) return "provider_trouble";
   if (!input.processed || input.processed <= 0) return "stuck";
   if (input.stopRequested) return "stopped";
   if (input.round + 1 >= AUTO_CONTINUE_MAX_ROUNDS) return "round_limit";
@@ -630,6 +638,7 @@ export const AUTO_CONTINUE_END_WORDS: Record<Exclude<AutoContinueStep, "continue
   error: "Đã dừng vì lần chạy vừa rồi báo lỗi.",
   rate_limited: "Đã dừng vì nhà cung cấp email báo chạm giới hạn gửi. Chờ ít phút rồi bấm lại.",
   provider_trouble: "Đã dừng vì nhiều thư lỗi liên tiếp. Kiểm Nhật ký gửi trước khi bấm lại.",
+  config_blocked: "Đã dừng vì cấu hình đang chặn gửi thư. Bật lại gửi thư rồi bấm lại.",
   stuck: "Đã dừng vì lần chạy vừa rồi không gửi thêm được lá nào (thường do thiếu dữ liệu điền ô của vài người).",
   round_limit: "Đã dừng sau số lần chạy tối đa của một lượt. Bấm lại để đi tiếp."
 };
