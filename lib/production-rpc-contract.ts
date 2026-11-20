@@ -195,6 +195,10 @@ export const PRODUCTION_PROVIDED_RPCS: readonly string[] = [
  *             20260905140900_s12_withdrawn_application_quarantine_restore.sql (NOT applied)
  */
 export const PENDING_PRODUCTION_MIGRATION_RPCS: readonly string[] = [
+  // Khoá lô gửi thư hàng loạt (một lô một lần chạy) — migration 20261120190000_khoa_lo_gui_thu.sql,
+  // phải dán Production TRƯỚC khi merge.
+  "email_batch_claim_run",
+  "email_batch_release_run",
   // Mã thành viên UEH: admin cấp và sửa tay — migration 20261101200000_ma_thanh_vien_ueh.sql, đã có trên Production.
   "vam124_assign_member_code",
   "vam124_set_member_code",
