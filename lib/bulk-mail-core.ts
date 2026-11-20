@@ -565,6 +565,8 @@ export function describeRunResult(input: {
   rateLimited?: boolean;
   providerTrouble?: boolean;
   configBlocked?: boolean;
+  /** Số lá lỗi điền ô của lần chạy (không ghi sổ, còn trong `remaining`). */
+  fillFailed?: number;
 }): string {
   const parts = [`Đã gửi ${input.sent} thư`];
   if (input.skipped) parts.push(`${input.skipped} thư bị cấu hình chặn`);
@@ -577,6 +579,10 @@ export function describeRunResult(input: {
   }
   if (input.rateLimited && input.remaining > 0) {
     return `${head} Nhà cung cấp email báo chạm giới hạn gửi nên đã dừng. Còn ${input.remaining} người chưa nhận — chờ ít phút (nếu là hạn mức trong ngày thì chờ sang ngày) rồi bấm “Gửi tiếp”.`;
+  }
+  // Còn lại chỉ toàn người lỗi điền ô: bấm "Gửi tiếp" không giúp gì, phải sửa mẫu hoặc dữ liệu trước.
+  if (input.fillFailed && input.remaining > 0 && input.remaining <= input.fillFailed) {
+    return `${head} Còn ${input.remaining} người chưa nhận vì thiếu dữ liệu điền ô — sửa mẫu thư hoặc dữ liệu của họ rồi mới bấm “Gửi tiếp”.`;
   }
   if (input.providerTrouble && input.remaining > 0) {
     return `${head} Nhiều thư lỗi liên tiếp nên đã dừng để không ghi lỗi cả lô. Còn ${input.remaining} người chưa nhận — kiểm Nhật ký gửi rồi bấm “Gửi tiếp”.`;

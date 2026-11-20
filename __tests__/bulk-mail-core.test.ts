@@ -312,6 +312,10 @@ describe("Gửi tiếp tới hết: khi nào bấm tiếp", () => {
     expect(describeRunResult({ ...base_, remaining: 10, providerTrouble: true })).toContain("lỗi liên tiếp");
     expect(describeRunResult({ ...base_, remaining: 0, providerTrouble: true })).toContain("đã gửi xong");
     expect(describeRunResult({ sent: 0, failed: 0, skipped: 1, remaining: 9, configBlocked: true })).toContain("chặn gửi thư");
+    // Còn lại chỉ toàn người lỗi điền ô: không bảo bấm Gửi tiếp suông.
+    expect(describeRunResult({ sent: 0, failed: 4, skipped: 0, remaining: 4, fillFailed: 4 })).toContain("sửa mẫu thư");
+    expect(describeRunResult({ sent: 10, failed: 4, skipped: 0, remaining: 30, fillFailed: 4 })).toContain("Gửi tiếp");
+    expect(describeRunResult({ sent: 10, failed: 4, skipped: 0, remaining: 30, fillFailed: 4 })).not.toContain("sửa mẫu thư");
   });
 
   it("câu báo nói 429 rõ ràng", () => {

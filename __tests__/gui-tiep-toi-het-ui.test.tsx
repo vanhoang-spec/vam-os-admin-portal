@@ -146,7 +146,7 @@ describe("Gửi tiếp tới hết", () => {
   it("câu báo cuối gom lỗi của MỌI vòng, không chỉ vòng cuối", async () => {
     vi.mocked(continueBulkSendAction)
       .mockResolvedValueOnce(ok(100, 85, { problems: ["An: hộp thư sai"] }) as never)
-      .mockResolvedValueOnce(ok(15, 85, { problems: ["Bình: hộp thư sai"] }) as never)
+      .mockResolvedValueOnce(ok(15, 85, { problems: ["Bình: hộp thư sai", "An: hộp thư sai"] }) as never)
       .mockResolvedValueOnce(ok(0, 15) as never);
     mount();
     clickAuto();

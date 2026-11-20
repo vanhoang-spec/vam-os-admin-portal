@@ -232,9 +232,26 @@ describe("một bức thư hỏng không dừng cả lô", () => {
     } as never);
 
     const result = await run(population(3));
-    expect(result).toMatchObject({ skipped: 1, failed: 0, sent: 0, remaining: 2, configBlocked: true });
+    // Lá bị chặn CHƯA đi: vẫn còn trong số còn lại, lô không xong.
+    expect(result).toMatchObject({ skipped: 1, failed: 0, sent: 0, remaining: 3, configBlocked: true });
     expect(sendTemplatedEmail).toHaveBeenCalledTimes(1);
     expect(updates.at(-1)).toMatchObject({ status: "running", skipped_count: 1 });
+  });
+
+  it("cổng mở lại: người từng bị cấu hình chặn được gửi lại (dòng sổ 'skipped' không tính là đã xử lý)", async () => {
+    const tables = population(2);
+    tables.handled = [{ to_email: "nguoi0@example.com", status: "skipped", error: "Chưa bật gửi thư" }];
+    const result = await run(tables);
+    const addressed = vi.mocked(sendTemplatedEmail).mock.calls.map((call) => call[0].toEmail).sort();
+    expect(addressed).toEqual(["nguoi0@example.com", "nguoi1@example.com"]);
+    expect(result).toMatchObject({ sent: 2, remaining: 0 });
+  });
+
+  it("lô chỉ còn 1 người mà bị cấu hình chặn: KHÔNG đánh dấu xong", async () => {
+    vi.mocked(sendTemplatedEmail).mockResolvedValue({ ok: true, skipped: true, reason: "Chưa bật gửi thư" } as never);
+    const result = await run(population(1));
+    expect(result).toMatchObject({ remaining: 1, configBlocked: true });
+    expect(updates.at(-1)).toMatchObject({ status: "running" });
   });
 
   it("không gửi bức thư còn thiếu dữ liệu, và không ghi sổ cho nó", async () => {

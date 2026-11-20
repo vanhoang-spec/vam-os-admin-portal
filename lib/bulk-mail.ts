@@ -1633,9 +1633,10 @@ async function alreadyHandled(batchId: string): Promise<{ emails: string[]; erro
     }
     const rows = (data ?? []) as Array<{ to_email: string; status?: string | null; error?: string | null }>;
     for (const row of rows) {
-      // Lá bị nhà cung cấp từ chối vì 429 CHƯA đi: lần sau phải gửi lại người này. Mọi dòng khác
-      // (đã gửi, bị chặn, lỗi khác) là đã xử lý — gửi lại lỗi vĩnh viễn (422…) chỉ lặp lỗi mãi.
-      if (isRateLimitedRow(row)) continue;
+      // Lá bị nhà cung cấp từ chối vì 429, hoặc bị cấu hình chặn (cổng gửi đóng), CHƯA đi: lần sau
+      // phải gửi lại người này. Mọi dòng khác (đã gửi, lỗi khác) là đã xử lý — gửi lại lỗi vĩnh viễn
+      // (422…) chỉ lặp lỗi mãi.
+      if (isRateLimitedRow(row) || row.status === "skipped") continue;
       emails.push(String(row.to_email ?? ""));
     }
     if (rows.length < PAGE) break;
@@ -1889,8 +1890,9 @@ export async function runEmailBatch(input: {
   // Lá lỗi điền ô KHÔNG ghi sổ nên vẫn còn phải gửi: không trừ khỏi số còn lại (lô không được
   // đánh dấu xong khi họ chưa nhận), và không cộng vào failed_count của lô (họ quay lại mỗi lần chạy,
   // cộng mãi là số lỗi phồng lên). Đúng ý "sửa dữ liệu của họ rồi chạy tiếp là xong".
+  // Lá bị cấu hình chặn cũng CHƯA đi (alreadyHandled cho nó quay lại khi cổng mở): không trừ.
   const ledgeredFailed = failed - fillFailed;
-  const remaining = Math.max(0, pending.length - (sent + ledgeredFailed + skipped));
+  const remaining = Math.max(0, pending.length - (sent + ledgeredFailed));
   const done = remaining === 0;
 
   const { error: updateError } = await client

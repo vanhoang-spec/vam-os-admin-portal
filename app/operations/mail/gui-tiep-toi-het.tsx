@@ -109,6 +109,8 @@ export function GuiTiepControls({
         const result = await continueBulkSendAction(initialBulkMailActionState, formData);
         total += result.processed ?? 0;
         for (const problem of result.problems ?? []) {
+          // Người lỗi điền ô quay lại ở mỗi vòng: kể một lần là đủ.
+          if (problems.includes(problem)) continue;
           if (problems.length < PROBLEMS_KEPT) problems.push(problem);
           else moreProblems += 1;
         }
