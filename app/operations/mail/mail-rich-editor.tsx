@@ -317,7 +317,8 @@ export const MailRichEditor = forwardRef<
           </select>
           <select
             aria-label="Font chữ"
-            value={String(textStyle.fontFamily ?? "")}
+            // Mẫu mở lại có thể mang tên font trong nháy kép; ô chọn so với nháy đơn của FONTS.
+            value={String(textStyle.fontFamily ?? "").replace(/"/g, "'")}
             onChange={(event) => {
               const value = event.target.value;
               if (value) editor.chain().focus().setFontFamily(value).run();
