@@ -179,6 +179,16 @@ const SHARED: sanitizeHtml.IOptions = {
 };
 
 /**
+ * Trình duyệt ghi tên font có dấu cách trong nháy KÉP (`"Times New Roman", Times, serif`), kể cả khi
+ * trình soạn đặt nháy đơn. Đổi về nháy đơn TRƯỚC khi lọc, thay vì cho bộ lọc nhận nháy kép: nháy kép
+ * trong thuộc tính thành `&quot;`, và dấu `;` của nó cắt đôi khai báo ở chỗ nào tách style theo `;`.
+ */
+function nhayDonChoStyle(tagName: string, attribs: sanitizeHtml.Attributes) {
+  if (!attribs.style) return { tagName, attribs };
+  return { tagName, attribs: { ...attribs, style: attribs.style.replace(/"/g, "'") } };
+}
+
+/**
  * Lọc HTML người soạn gửi lên, để LƯU. Giữ các thuộc tính `data-*` trình soạn cần để mở lại mẫu
  * (căn ảnh, khung nội dung, màu nền và viền ô); lượt lọc cuối lúc gửi sẽ bỏ chúng.
  */
@@ -189,6 +199,7 @@ export function locHtmlThu(html: string): string {
     ...SHARED,
     allowedAttributes: mergeAttrs(BASE_ATTRS, EDITOR_DATA_ATTRS),
     transformTags: {
+      "*": nhayDonChoStyle,
       a: aTransform,
       img: (tagName, attribs) => ({ tagName, attribs: imgAttribs(attribs) })
     }
